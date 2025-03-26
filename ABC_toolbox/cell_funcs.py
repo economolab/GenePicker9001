@@ -1,0 +1,134 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Feb 23 15:05:22 2025
+
+@author: jpv88
+"""
+
+import random
+import numpy as np
+import pandas as pd
+
+from tqdm import tqdm
+
+def bootstrap_scRNAseq(meta, exp, freqs, n=1000):
+    
+    """
+    Bootstrap a new distribution of scRNA-seq data where proportions match prescribed values.
+    These proportions are calculated using MERFISH data.
+    
+    Parameters
+    ----------
+    meta : pandas.DataFrame (l x m)
+        Metadata DataFrame with l cells and m genes
+    exp : numpy.ndarray (l x m)
+        Expression array with l cells and m genes
+    ratios : dict
+        Relative proportions of each cluster in meta.
+        Keys correspond to clusters.
+        Values correspond to proportions (all sum to 1)
+    n : int
+        Total number of cells desired in bootstrapped distribution.
+
+    Returns
+    -------
+    boot_mat : numpy.ndarray (n x m)
+        Bootstrapped expression array with n cells and m genes.
+
+    """
+    
+    # buggy indices can mess everything up, reset to avoid
+    meta.reset_index(drop=True, inplace=True)
+
+    # determine how many cells of each cluster are needed
+    num_per_clu = [round(x*n) for x in freqs.values()]
+    
+    # lists that stores 1D numpy arrays corresponding to each bootstrapped cell
+    boot_mat = []
+    boot_meta = []
+
+    # iterate through clusters, i is index, x is number of cells needed from that cluster
+    for i, x in enumerate(num_per_clu):
+
+        # extract metadata and expression values associated with a given cluster
+        cur_clu = list(freqs.keys())[i]
+        meta_clu = meta.iloc[meta.index[meta['cluster'] == cur_clu]]
+        exp_clu = exp[meta['cluster'] == cur_clu]
+        
+        # make sure the cluster exists
+        if len(meta_clu) != 0:
+            for _ in range(x):
+                idx = random.randint(0, len(meta_clu)-1)
+                boot_mat.append(exp_clu[idx,:])
+                boot_meta.append(meta_clu.iloc[idx])
+
+    boot_mat = np.array(boot_mat)
+    boot_meta = pd.DataFrame(boot_meta)
+    boot_meta.reset_index(drop=True, inplace=True)
+
+    return boot_mat, boot_meta
+
+def calc_frac_per_type(meta, level='cluster'):
+    
+    # find every unique cell type of the prescribed level in this metadata dataframe
+    uniq_clu = np.unique(meta[level])
+    
+    # find how many cells of each type there are
+    num_per_clu = []
+    for clu in uniq_clu:
+        num_per_clu.append(sum(meta[level] == clu))
+    
+    # calculate the fraction per cell type
+    num_cells = len(meta)
+    frac_per_clu = [x/num_cells for x in num_per_clu]
+    
+    # convert to dictionary
+    d = {uniq_clu[i]: frac_per_clu[i] for i in range(len(uniq_clu))}
+    
+    return d
+
+# convert MERFISH frequencies to new frequencies based on a cluster mapping
+def freqs_to_cm_freqs(freqs, clu_mapping):
+    
+    cgs = np.unique(list(clu_mapping.values()))
+    
+    cm_freqs = {cg: 0 for cg in cgs}
+
+    for cg in cm_freqs.keys():
+        cg_split = cg.split(", ")
+        for clu in cg_split:
+            cm_freqs[cg] += freqs[clu]
+            
+    return cm_freqs
+
+# bootstrap supercells
+def boot_super(exp, meta, k=5, boot_factor=2):
+    
+    exp = exp.astype("uint16")
+    
+    cluster = meta["cluster"].values
+    uniq_clu = np.unique(cluster)
+    
+    exp_super = []
+    meta_super = []
+    
+    for clu in tqdm(uniq_clu):
+        
+        mask = (cluster == clu)
+        meta_clu = meta[mask]
+        meta_clu.reset_index(inplace=True)
+        exp_clu = exp[mask,:]
+        n_real_cells = exp_clu.shape[0]
+        
+        for _ in range(n_real_cells*boot_factor):
+            
+            idx = random.choices(range(n_real_cells), k=k)
+            exps = [exp_clu[i,:] for i in idx]
+            exp_super.append(sum(exps))
+            meta_super.append(meta_clu.iloc[idx[0]])
+            
+    exp_super = np.vstack(exp_super)
+    meta_super = pd.DataFrame(meta_super)
+    
+    return exp_super, meta_super
+    

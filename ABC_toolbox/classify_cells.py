@@ -3,6 +3,8 @@
 Utilities for classifying cell types
 """
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -75,6 +77,7 @@ def preprocess_data(exp, meta, freqs, clu_mapping=None):
     
     all_genes = ABC_utils.load_gene("scRNAseq")
     adata.var_names = all_genes
+    adata.var_names_make_unique()
     
     X = adata
 
@@ -103,7 +106,7 @@ def gini(array):
 # cross-validate a classifier
 def cross_val_classifier(meta, exp, freqs,
                          genes=None, clf_method='knn', n_splits=5,
-                         n_cells_boot=5000):
+                         n_cells_boot=5000, verbose=True):
     
     """
     Parameters
@@ -131,12 +134,11 @@ def cross_val_classifier(meta, exp, freqs,
     
     # restrict to only a subset of genes
     if genes is not None:
-        all_genes = ABC_utils.load_gene("scRNAseq")
-        idx = np.where(np.isin(all_genes, genes))[0]
-        exp = exp[:,idx]
-
+        exp = exp[:,genes]
     
-    sc.pp.pca(exp)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Setting element")
+        sc.pp.pca(exp)
     
     pcs = exp.obsm['X_pca']
 
@@ -151,7 +153,8 @@ def cross_val_classifier(meta, exp, freqs,
     res["sparsities"] = []
     res["cms"] = []
     res["labels"] = []
-    for i in tqdm(range(n_splits), desc='Train-test splits...'):
+    
+    for i in (tqdm(range(n_splits), desc='Train-test splits...') if verbose else range(n_splits)):
         train = indices[:i] + indices[i+1:]
         train = np.concatenate(train)
         train = np.sort(train)

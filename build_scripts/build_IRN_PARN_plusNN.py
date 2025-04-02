@@ -25,14 +25,6 @@ MERFISH_meta = data_nav.extract_MERFISH_meta(MERFISH_meta,
                                               category='anatomy',
                                               level=level)
 
-non_neuronal = ['30 Astro-Epen', '31 OPC-Oligo', '32 OEC', '33 Vascular', '34 Immune']
-
-MERFISH_meta = data_nav.extract_MERFISH_meta(MERFISH_meta, 
-                                              non_neuronal, 
-                                              kind='remove',
-                                              category='taxonomy',
-                                              level='class')
-
 # remove junk column
 MERFISH_meta.drop(columns=["Unnamed: 0"], inplace=True)
 

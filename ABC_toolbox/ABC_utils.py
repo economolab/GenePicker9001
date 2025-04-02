@@ -4,6 +4,7 @@ Convenience functions
 """
 
 import os
+import pickle
 import sys
 
 # obtain this file's directory
@@ -36,5 +37,22 @@ def load_gene(dtype):
             file = file = os.path.join(load_dir, "gene_scRNAseq.npy")
             gene = np.load(file, allow_pickle=True)
             return gene
+        
+def load_colors_dict(level):
+
+    with open(os.path.join(load_dir, "colors_dict.pkl"), "rb") as handle:
+        colors_dict = pickle.load(handle)
+
+    match level:
+        case "class":
+            return_dict = colors_dict["class_dict"]
+        case "subclass":
+            return_dict = colors_dict["subclass_dict"]
+        case "supertype":
+            return_dict = colors_dict["supertype_dict"]
+        case "cluster":
+            return_dict = colors_dict["cluster_dict"]
+
+    return return_dict
 
 

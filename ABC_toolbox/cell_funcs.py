@@ -53,7 +53,7 @@ def bootstrap_scRNAseq(meta, exp, freqs, n=1000):
         # extract metadata and expression values associated with a given cluster
         cur_clu = list(freqs.keys())[i]
         meta_clu = meta.iloc[meta.index[meta['cluster'] == cur_clu]]
-        exp_clu = exp[meta['cluster'] == cur_clu]
+        exp_clu = exp[meta['cluster'] == cur_clu,:]
         
         # make sure the cluster exists
         if len(meta_clu) != 0:

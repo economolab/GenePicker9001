@@ -9,6 +9,7 @@ import random
 import numpy as np
 import pandas as pd
 
+from sklearn.model_selection import StratifiedKFold
 from tqdm import tqdm
 
 def bootstrap_scRNAseq(meta, exp, freqs, n=1000):
@@ -131,4 +132,37 @@ def boot_super(exp, meta, k=5, boot_factor=2):
     meta_super = pd.DataFrame(meta_super)
     
     return exp_super, meta_super
+
+# filter cell types that don't have at least k cells
+def filt_cells(exp, meta, k=5):
+    
+    meta.reset_index(drop=True, inplace=True)
+    
+    clu, clu_count = np.unique(meta["cluster"], return_counts=True)
+    
+    bool_mask = (clu_count >= k)
+    keep_clu = clu[bool_mask]
+    bool_mask = np.isin(meta["cluster"], keep_clu)
+    
+    meta = meta.iloc[meta.index[bool_mask]]
+    meta.reset_index(drop=True, inplace=True)
+    
+    exp = exp[bool_mask,:]
+    
+    return exp, meta
+
+# K fold train-test split cells
+def K_fold_cells(exp, meta, k=5, level='cluster'):
+    
+    skf = StratifiedKFold(n_splits=k)
+    
+    # total number of cells
+    n_samples = len(meta)
+    
+    X = np.zeros(n_samples)
+    y = meta[level].values
+    
+    train, test = 
+    
+    
     

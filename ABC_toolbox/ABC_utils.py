@@ -38,6 +38,14 @@ def load_gene(dtype):
             gene = np.load(file, allow_pickle=True)
             return gene
         
+def load_parcel_dict():
+    
+    file = os.path.join(load_dir, "parcellation_dict.pickle")
+    with open(file, 'rb') as handle:
+        parc_dict = pickle.load(handle)
+
+    return parc_dict
+        
 def load_colors_dict(level):
 
     with open(os.path.join(load_dir, "colors_dict.pkl"), "rb") as handle:
@@ -54,5 +62,26 @@ def load_colors_dict(level):
             return_dict = colors_dict["cluster_dict"]
 
     return return_dict
+
+# identify corresponding taxonomic level of any taxonomic label
+@np.vectorize
+def id_tax(tax):
+
+    with open("./ABC_toolbox/util_files/tax_dict.pkl", "rb") as handle:
+        tax_dict = pickle.load(handle)
+
+    for level in tax_dict.keys():
+        if tax in tax_dict[level]:
+            return level
+
+    return "Unable to identify taxonomic label"
+
+@np.vectorize
+def fetch_cluster_tax(cluster):
+    
+    with open("./ABC_toolbox/util_files/cluster_dict.pkl", "rb") as handle:
+        cluster_dict = pickle.load(handle)
+    
+    return cluster_dict[cluster] 
 
 

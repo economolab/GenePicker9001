@@ -61,7 +61,7 @@ MERFISH_meta.reset_index(drop=True, inplace=True)
 clusters = np.unique(MERFISH_meta["cluster"].values)
 
 scRNAseq_meta = data_nav.load_meta('scRNAseq')
-scRNAseq_data = data_nav.fetch_scRNAseq(clusters, scRNAseq_meta, form='raw')
+scRNAseq_data = data_nav.fetch_scRNAseq(clusters, scRNAseq_meta, form='raw', nn_frac=0.1)
 
 scRNAseq_meta, scRNAseq_raw = scRNAseq_data
 scRNAseq_meta.reset_index(drop=True, inplace=True)
@@ -93,14 +93,14 @@ MERFISH_meta.reset_index(drop=True, inplace=True)
 # %% write scRNAseq data and MERFISH frequencies
 
 # save scRNAseq raw expression data
-np.save(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw"), scRNAseq_raw)
+np.save(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-NN-raw"), scRNAseq_raw)
 
 # save scRNAseq metadata
-scRNAseq_meta.to_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-meta.csv"),
+scRNAseq_meta.to_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-NN-meta.csv"),
                                   index=False)
 
 # save MERFISH frequencies
 MERFISH_freqs = cell_funcs.calc_frac_per_type(MERFISH_meta)
-with open(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"), 'wb') as handle:
+with open(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-NN-freqs.pkl"), 'wb') as handle:
     pickle.dump(MERFISH_freqs, handle, protocol=pickle.HIGHEST_PROTOCOL)
 

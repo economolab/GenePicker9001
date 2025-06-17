@@ -22,10 +22,22 @@ from ABC_toolbox import ABC_utils, cell_funcs
 
 # train a cell type classifier
 def train_classifier(X_train, y_train, clf_method='knn'):
+    
 
     match clf_method:
         case 'knn':
             clf = KNeighborsClassifier(metric='cosine')
+
+                
+    clf.fit(X_train, y_train)
+
+    return clf
+
+def train_classifier_single(X_train, y_train, clf_method='knn'):
+    
+    match clf_method:
+        case 'knn':
+            clf = KNeighborsClassifier(metric='euclidean')
 
     clf.fit(X_train, y_train)
 
@@ -59,7 +71,7 @@ def preprocess_data(exp, meta, freqs, clu_mapping=None):
         
     # convert freqs to cluster mapping specific freqs
     if clu_mapping is not None:
-        freqs = cell_funcs.freqs_to_cm_freqs(freqs)
+        freqs = cell_funcs.freqs_to_cm_freqs(freqs, clu_mapping)
 
     y = meta["cluster"]
 
@@ -134,14 +146,20 @@ def cross_val_classifier(meta, exp, freqs,
     
     # restrict to only a subset of genes
     if genes is not None:
+        genes = np.array(genes)
         exp = exp[:,genes]
     
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Setting element")
-        sc.pp.pca(exp)
+        
+        if len(genes) > 2:
+            sc.pp.pca(exp)
     
-    pcs = exp.obsm['X_pca']
-
+    if len(genes) > 2:
+        pcs = exp.obsm['X_pca']
+    else:
+        pcs = exp.X
+   
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
     splits = skf.split(np.zeros(meta.shape[0]), meta)
     indices = []
@@ -166,6 +184,74 @@ def cross_val_classifier(meta, exp, freqs,
         y_test = meta.iloc[test]
         
         clf = train_classifier(X_train, y_train, 
+                               clf_method=clf_method)
+        
+        acc, sparsity, cm, labels = test_classifier(X_test, y_test, clf, freqs)
+        
+        res["accs"].append(acc)
+        res["sparsities"].append(sparsity)
+        res["cms"].append(cm)
+        res["labels"].append(labels)
+        
+    return res
+
+# cross-validate a classifier
+def cross_val_classifier_single(meta, exp, freqs,
+                         gene, clf_method='knn', n_splits=5,
+                         n_cells_boot=5000, verbose=True):
+    
+    """
+    Parameters
+    ----------
+    meta : TYPE
+        DESCRIPTION.
+    exp : TYPE
+        DESCRIPTION.
+    freqs : TYPE
+        DESCRIPTION.
+    genes : TYPE, optional
+        DESCRIPTION. The default is None.
+    clf_method : TYPE, optional
+        DESCRIPTION. The default is 'knn'.
+    clu_mapping : TYPE, optional
+        DESCRIPTION. The default is None.
+    n_splits : TYPE, optional
+        DESCRIPTION. The default is 5.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    exp = exp[:,gene]
+    
+    pcs = exp.X
+   
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
+    splits = skf.split(np.zeros(meta.shape[0]), meta)
+    indices = []
+    for split in splits:
+        indices.append(split[1])
+    
+    res = {}
+    res["accs"] = []
+    res["sparsities"] = []
+    res["cms"] = []
+    res["labels"] = []
+    
+    for i in (tqdm(range(n_splits), desc='Train-test splits...') if verbose else range(n_splits)):
+        train = indices[:i] + indices[i+1:]
+        train = np.concatenate(train)
+        train = np.sort(train)
+        test = indices[i]
+        
+        X_train = pcs[train,:]
+        y_train = meta.iloc[train]
+        X_test = pcs[test,:]
+        y_test = meta.iloc[test]
+        
+        clf = train_classifier_single(X_train, y_train, 
                                clf_method=clf_method)
         
         acc, sparsity, cm, labels = test_classifier(X_test, y_test, clf, freqs)

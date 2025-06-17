@@ -5,6 +5,8 @@ Created on Sat Mar 29 19:27:06 2025
 @author: jpv88
 """
 
+import pickle
+
 import anndata as ad
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -27,3 +29,20 @@ def plot_gene(gene, meta, exp, level="cluster", filter_low=False, ratios=None):
     
     mpl.rcParams['image.composite_image'] = False
     plt.rcParams['svg.fonttype'] = 'none'
+    
+def fetch_colors_dict(level):
+
+    with open("./ABC_toolbox/util_files/colors_dict.pkl", "rb") as handle:
+        colors_dict = pickle.load(handle)
+
+    match level:
+        case "class":
+            return_dict = colors_dict["class_dict"]
+        case "subclass":
+            return_dict = colors_dict["subclass_dict"]
+        case "supertype":
+            return_dict = colors_dict["supertype_dict"]
+        case "cluster":
+            return_dict = colors_dict["cluster_dict"]
+
+    return return_dict

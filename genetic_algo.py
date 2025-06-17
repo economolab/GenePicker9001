@@ -62,6 +62,10 @@ def fitness_func(ga_instance, solution, solution_idx):
     
     gene_subset = ind2gene(solution, ga_instance.gene_names)
     
+    if ga_instance.set_genes is not None:
+        set_genes = [str(el) for el in ga_instance.set_genes]
+        gene_subset.extend(set_genes)
+    
     res = classify_cells.cross_val_classifier(ga_instance.meta, 
                                               ga_instance.exp, 
                                               ga_instance.freqs, 
@@ -142,7 +146,20 @@ def run_ga(meta, exp, freqs, top_genes,
             parent_selection_type='rws',
             crossover_probability=0.5,
             mutation_type='adaptive',
-            mutation_probability=[0.02, 0]):
+            mutation_probability=[0.5, 0],
+            set_genes=None):
+    
+    if set_genes is not None:
+        
+        top_genes = list(top_genes)
+        
+        for set_gene in set_genes:
+            if set_gene in top_genes:
+                top_genes.remove(set_gene)
+                
+        num_genes = num_genes - len(set_genes)
+    
+    top_genes = np.array(top_genes)
     
     gene_type = int
     keep_elitism = 1
@@ -188,6 +205,7 @@ def run_ga(meta, exp, freqs, top_genes,
     ga_instance.exp = exp
     ga_instance.freqs = freqs
     ga_instance.gene_names = top_genes
+    ga_instance.set_genes = set_genes
     
     ga_instance.run()
     

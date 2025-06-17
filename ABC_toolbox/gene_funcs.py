@@ -190,7 +190,7 @@ def calc_rdr(exp, meta, ratios, n=1000, N=10):
 
     return rdrs
 
-def calc_var_E(exp, meta, ratios, n=1000, N=10):
+def calc_var_E(exp, meta, ratios, n=1000, N=10, level='cluster'):
     
     var_E_total = []
     
@@ -202,8 +202,8 @@ def calc_var_E(exp, meta, ratios, n=1000, N=10):
         meta_clu_dict = {}
         
         # build dictionary of expression arrays corresponding to each cluster 
-        for clu in ratios.keys():
-            meta_clu_dict[clu] = exp[(meta['cluster'] == clu).values,:]
+        for clu in np.unique(meta[level]):
+            meta_clu_dict[clu] = exp[(meta[level] == clu).values,:]
         
         frac_var_Es = []
         
@@ -217,7 +217,7 @@ def calc_var_E(exp, meta, ratios, n=1000, N=10):
             var_clu_dict = {}
             
             # iterate through clusters
-            for clu in ratios.keys():
+            for clu in np.unique(meta[level]):
                 
                 mean_clu_dict[clu] = np.mean(meta_clu_dict[clu][:,idx])
                 var_clu_dict[clu] = np.var(meta_clu_dict[clu][:,idx])

@@ -8,6 +8,7 @@ Data navigation utility functions.
 import h5py
 import os
 import pickle
+import random
 import scipy
 import sys
 
@@ -256,7 +257,7 @@ def fetch_MERFISH(
     return meta_full, exp
 
 
-def fetch_scRNAseq(clusters, meta, form="log2"):
+def fetch_scRNAseq(clusters, meta, form="log2", neur_frac=1, nn_frac=0.5):
     """
     Extracts all scRNAseq cells associated with any desired clusters
 
@@ -331,7 +332,7 @@ def fetch_scRNAseq(clusters, meta, form="log2"):
 
     # take in current list of cell labels and expression matrix rows and add
     # any cells from a new file
-    def load_file(meta_list, exp_mat_full, file, pbar):
+    def load_file(meta_list, exp_mat_full, file, pbar, nn_frac):
         # set the appropriate path depending on scRNAseq data type
         if "10XMulti" in file:
             path = params.data_dir
@@ -363,6 +364,24 @@ def fetch_scRNAseq(clusters, meta, form="log2"):
         # all the meta rows associated with cells in this file
         meta_file = meta.iloc[meta.index[bool_mask]]
         
+        # non-neuronal classes
+        non_neuronal = ['30 Astro-Epen', '31 OPC-Oligo', '32 OEC', '33 Vascular', '34 Immune']
+        nn_mask = np.isin(meta_file["class"], non_neuronal)
+        nn_index = list(meta_file.index[nn_mask])
+        neur_index = list(meta_file.index[~nn_mask])
+        
+        # randomly keep some neurons
+        k = round(neur_frac*len(neur_index))
+        neur_keep = random.sample(neur_index, k)
+        keep_index = list(neur_keep)
+        
+        # randomly keep some non-neuronal
+        k = round(nn_frac*len(nn_index))
+        nn_keep = random.sample(nn_index, k)
+        keep_index.extend(nn_keep)
+        
+        meta_file = meta_file.loc[keep_index]
+        
         # cell labels of cells of the desired clusters present in this matrix
         cells_present = meta_file['cell_label']
         
@@ -390,7 +409,7 @@ def fetch_scRNAseq(clusters, meta, form="log2"):
     exp_mat_full = csr_array(np.ones((1, 32285), dtype='float32'))
     for file in files_to_read:
         cell_label_list, exp_mat_full = load_file(
-                 meta_list, exp_mat_full, file, pbar
+                 meta_list, exp_mat_full, file, pbar, nn_frac
              )
         pbar.update()
 

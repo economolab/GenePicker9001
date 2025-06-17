@@ -215,7 +215,7 @@ def gen_test_classifier(meta, exp, ratios, clu_mapping=None):
         meta_train = meta.iloc[train]
         meta_test = meta.iloc[test]
         
-        meta_train, exp_train = bootstrap_scRNAseq(meta_train, exp_train, ratios, 1000)
+        meta_train, exp_train = bootstrap_scRNAseq(meta_train, exp_train, ratios, 4000)
         
         X_train, y_train = prepare_bootstrapped_data(meta_train, exp_train)
         

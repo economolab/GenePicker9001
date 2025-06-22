@@ -10,10 +10,12 @@ import pandas as pd
 import scanpy as sc
 import scipy as sp
 
-from anndata import AnnData
+from anndata import AnnData, ImplicitModificationWarning
+from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.model_selection import StratifiedKFold
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
 from ABC_toolbox import ABC_utils, cell_funcs
@@ -93,7 +95,74 @@ def preprocess_data(exp, meta, freqs, clu_mapping=None):
     
     X = adata
 
-    return X, y, freqs 
+    return X, y, freqs
+
+# preprocess expression matrix
+def preprocess_exp(exp, scaler=None, return_scaler=False):
+    
+    # check if scipy sparse array
+    if isinstance(exp, sp.sparse.sparray):
+        exp = exp.todense()
+    
+    # make sure exp is a numpy array
+    if not isinstance(exp, np.ndarray):
+        exp = exp.to_numpy()
+    else:
+        pass 
+    
+    # log1p transform
+    exp = np.log1p(exp)
+    
+    # make new scaler if no scaler is provided, otherwise use provided scaler
+    if scaler == None:
+        scaler = StandardScaler()
+        exp = scaler.fit_transform(exp)
+    else: 
+        exp = scaler.transform(exp)
+    
+    # return scaler exp and scaler if requested, otherwise just exp
+    if return_scaler == True:
+        return exp, scaler
+    else:
+        return exp
+    
+
+# make sure bootstrapped data is ready to be input to a classifier
+def preprocess_data_splits(boots, freqs):
+    
+    data = []
+    
+    for boot in tqdm(boots, desc="Preprocessing bootstrapped data..."):
+    
+        train_exp = boot[0][0]
+        train_meta = boot[0][1]
+        test_exp = boot[1][0]
+        test_meta = boot[1][1]
+        
+        train_exp, train_scaler = preprocess_exp(train_exp, return_scaler=True)
+        test_exp = preprocess_exp(test_exp, scaler=train_scaler)
+        
+        exp = np.concatenate((train_exp, test_exp), axis=0)
+        exp = pd.DataFrame(data=exp)
+        
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=ImplicitModificationWarning)
+            adata = AnnData(exp)
+        
+        all_genes = ABC_utils.load_gene("scRNAseq")
+        adata.var_names = all_genes
+        adata.var_names_make_unique()
+        
+        batch = np.concatenate((np.repeat('train', len(train_meta)),
+                                np.repeat('test', len(test_meta))))
+        adata.obs['batch'] = batch
+        
+        meta = pd.concat((train_meta, test_meta))
+        meta['batch'] = batch
+        
+        data.append((adata, meta))
+        
+    return data, freqs
 
 
 def gini(array):
@@ -114,6 +183,103 @@ def gini(array):
 
     # Gini coefficient
     return ((np.sum((2 * index - n - 1) * array)) / (n * np.sum(array)))
+
+# cross-validate a classifier
+def cross_val_classifier_splits(data, freqs,
+                                genes=None, clf_method='knn', verbose=True, 
+                                clu_mapping=None):
+    
+    """
+    Parameters
+    ----------
+    meta : TYPE
+        DESCRIPTION.
+    exp : TYPE
+        DESCRIPTION.
+    freqs : TYPE
+        DESCRIPTION.
+    genes : TYPE, optional
+        DESCRIPTION. The default is None.
+    clf_method : TYPE, optional
+        DESCRIPTION. The default is 'knn'.
+    clu_mapping : TYPE, optional
+        DESCRIPTION. The default is None.
+    n_splits : TYPE, optional
+        DESCRIPTION. The default is 5.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    n_splits = len(data)
+    
+    # convert freqs to cluster mapping specific freqs
+    if clu_mapping is not None:
+        freqs = cell_funcs.freqs_to_cm_freqs(freqs, clu_mapping)
+    
+    split_dicts = []
+    for i in tqdm(range(n_splits), desc="Preprocessing splits...") if verbose else range(n_splits):
+        
+        exp = data[i][0]
+        meta = data[i][1]
+        
+        train_mask = (exp.obs['batch'].values == 'train')
+        test_mask = (exp.obs['batch'].values == 'test')
+        gene_mask = np.array([gene in genes for gene in exp.var_names.values])
+        
+        exp_train = exp.X[train_mask,:]
+        exp_test = exp.X[test_mask,:]
+        
+        exp_train = exp_train[:,gene_mask]
+        exp_test = exp_test[:,gene_mask]
+        
+        n_components = min(exp_train.shape) - 1
+        if n_components > 50:
+            n_components = 50
+        
+        pca = PCA(n_components=n_components)
+        exp_train = pca.fit_transform(exp_train)
+        exp_test = pca.transform(exp_test)
+        
+        if clu_mapping is not None:
+            new_clus = [clu_mapping[clu] for clu in meta['cluster'].values]
+            meta['cluster'] = new_clus
+        
+        split_dict = {}
+        split_dict['X_train'] = exp_train
+        split_dict['X_test'] = exp_test
+        split_dict['y_train'] = meta['cluster'].values[train_mask]
+        split_dict['y_test'] = meta['cluster'].values[test_mask]
+        
+        split_dicts.append(split_dict)
+    
+    res = {}
+    res["accs"] = []
+    res["sparsities"] = []
+    res["cms"] = []
+    res["labels"] = []
+    
+    for i in tqdm(range(n_splits), desc='Train-test splits...') if verbose else range(n_splits):
+        split_dict = split_dicts[i]
+        
+        X_train = split_dict["X_train"]
+        y_train = split_dict["y_train"]
+        X_test = split_dict["X_test"]
+        y_test = split_dict["y_test"]
+        
+        clf = train_classifier(X_train, y_train, 
+                               clf_method=clf_method)
+        
+        acc, sparsity, cm, labels = test_classifier(X_test, y_test, clf, freqs)
+        
+        res["accs"].append(acc)
+        res["sparsities"].append(sparsity)
+        res["cms"].append(cm)
+        res["labels"].append(labels)
+        
+    return res
 
 # cross-validate a classifier
 def cross_val_classifier(meta, exp, freqs,

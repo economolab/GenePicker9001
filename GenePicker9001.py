@@ -19,7 +19,17 @@ from tqdm import tqdm
 
 from ABC_toolbox import ABC_plot, ABC_utils, cell_funcs, classify_cells, gene_funcs, iterative_reclustering
 from gene_filter import filt_genes
-from genetic_algo import run_ga
+from genetic_algo import run_ga, find_genes
+
+# %%
+
+meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-meta.csv"), low_memory=False)
+exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
+freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
+
+find_genes(meta, exp, freqs, num_generations=5, num_iter=1, filt_order=[1000, 500, 100],
+           rdr_N=1, var_E_N=1)
+
 
 # %% params
 
@@ -47,15 +57,16 @@ for _ in range(10):
     exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
     freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
     
-    exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=5)
+    exp = gene_funcs.normalize_counts_to_median(exp)
     
-    exp_super = gene_funcs.normalize_counts_to_median(exp_super)
-    
+    exp_super, meta_super = cell_funcs.boot_super(exp, meta)
     gene_df, top_genes = filt_genes(exp_super, meta_super, freqs, top_n=top_n)
     
+    splits = cell_funcs.K_fold_cells(meta)
+    supers = cell_funcs.boot_super_splits(exp, meta, splits, k=5)
+    
     # bootstrap distribution from scRNAseq that matches MERFISH frequencies
-    exp_boot, meta_boot = cell_funcs.bootstrap_scRNAseq(meta_super, exp_super, freqs, 
-                                                        n=5000)
+    boots = cell_funcs.bootstrap_scRNAseq_splits(supers, freqs, n=5000)
     
     exp_boot, meta_boot, cm_freqs = classify_cells.preprocess_data(exp_boot, meta_boot, freqs)
     
@@ -214,6 +225,15 @@ final_gene_df_500 = pd.DataFrame(data=final_gene_df_500)
 final_gene_df_500.to_csv("final_gene_df_500.csv")
 
 final_gene_df_filt = final_gene_df_500.nlargest(200, 'score')
+
+# %%
+
+data, freqs = classify_cells.preprocess_data_splits(boots, freqs)
+
+# %%
+
+res = classify_cells.cross_val_classifier_splits(data, freqs, genes=['Phox2b', 'Slc17a6',
+                                                                     'Slc6a5', 'Slc5a7'])
 
 # %%
 
@@ -625,37 +645,97 @@ cbar.set_label("PCC", rotation=270, labelpad=15)
 # %%
 
 # optimized
-genes = ['Phox2b', 'Slc6a5', 'Slc17a6', 'Slc5a7',
-            'Hoxb5', 'Ebf3', 'Pbx3', 'Nxph1',
-            'Arpp21', 'Zfhx4', 'Meis2', 'Rbms3',
-            'Rbfox1', 'Grin3a', 'Bend6', 'Syt2',
-            'Tshz2', 'Tenm2', 'Kcna2', 'Pax2',
-            'Cntnap2', 'Pcdh7', 'Sdk1', 'Vamp1']
+# genes = ['Phox2b', 'Slc6a5', 'Slc17a6', 'Slc5a7',
+#             'Hoxb5', 'Ebf3', 'Pbx3', 'Nxph1',
+#             'Arpp21', 'Zfhx4', 'Meis2', 'Rbms3',
+#             'Rbfox1', 'Grin3a', 'Bend6', 'Syt2',
+#             'Tshz2', 'Tenm2', 'Kcna2', 'Pax2',
+#             'Cntnap2', 'Pcdh7', 'Sdk1', 'Vamp1']
 # HVGs
 # genes = ['Fn1', 'Dbh', 'Ttn', 'Mafb', 'Mecom', 'Atp1a1', 'Kcnq4', 'Spp1',
 #        'Gm32647', 'Calca', 'Slc6a2', 'Maf', 'Cd24a', 'Npb', 'Gm32004',
 #        'Slc18a3', 'Clu', 'Pvalb', 'Chodl', 'Gm42418', 'AY036118',
 #        'Slc5a7', 'Ttr', 'Slc18a2']
-all_genes = ABC_utils.load_gene("scRNAseq")
 
-gene_idx = []
-for gene in genes:
-    gene_idx.append(np.where(all_genes == gene)[0][0])
+genes = ['Fn1', 'Dbh', 'Ttn', 'Mafb', 'Mecom', 'Atp1a1', 'Kcnq4', 'Spp1',
+       'Gm32647', 'Calca', 'Slc6a2', 'Maf']
+# all_genes = ABC_utils.load_gene("scRNAseq")
 
-final_labels, final_cm, all_accs, all_n_labels = iterative_reclustering.iterative_recluster(meta_super, 
-                                                                                            exp_super[:,gene_idx], 
-                                                                                            freqs, acc_thresh=1)
+# gene_idx = []
+# for gene in genes:
+#     gene_idx.append(np.where(all_genes == gene)[0][0])
+    
+meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-meta.csv"), low_memory=False)
+exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
+freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
+
+exp = gene_funcs.normalize_counts_to_median(exp)
+
+splits = cell_funcs.K_fold_cells(meta)
+supers = cell_funcs.boot_super_splits(exp, meta, splits, k=5)
+
+# bootstrap distribution from scRNAseq that matches MERFISH frequencies
+boots = cell_funcs.bootstrap_scRNAseq_splits(supers, freqs, n=5000)
+
+data, freqs = classify_cells.preprocess_data_splits(boots, freqs)
+
+final_labels, final_cm, all_accs, all_n_labels = iterative_reclustering.iterative_recluster_splits(data,
+                                                                                                   freqs, 
+                                                                                                   genes=genes, 
+                                                                                                   acc_thresh=1)
+
+hvgs_24_n_labels = all_n_labels
+hvgs_24_accs = all_accs
+
+hvgs_24_n_labels.append(1)
+hvgs_24_accs.append(1)
+
 # %%
+
+# optimized
+genes = ['Phox2b', 'Slc6a5', 'Slc17a6', 'Slc5a7',
+            'Hoxb5', 'Ebf3', 'Pbx3', 'Nxph1',
+            'Arpp21', 'Zfhx4', 'Meis2', 'Rbms3']
+    
+meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-meta.csv"), low_memory=False)
+exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
+freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
+
+exp = gene_funcs.normalize_counts_to_median(exp)
+
+splits = cell_funcs.K_fold_cells(meta)
+supers = cell_funcs.boot_super_splits(exp, meta, splits, k=5)
+
+# bootstrap distribution from scRNAseq that matches MERFISH frequencies
+boots = cell_funcs.bootstrap_scRNAseq_splits(supers, freqs, n=5000)
+
+data, freqs = classify_cells.preprocess_data_splits(boots, freqs)
+
+final_labels, final_cm, all_accs, all_n_labels = iterative_reclustering.iterative_recluster_splits(data,
+                                                                                                   freqs, 
+                                                                                                   genes=genes, 
+                                                                                                   acc_thresh=1)
+
+opt_24_n_labels = all_n_labels
+opt_24_accs = all_accs
+
+opt_24_n_labels.append(1)
+opt_24_accs.append(1)
+
+    
+# %%
+
+import matplotlib.pyplot as plt
 
 fig, ax = plt.subplots()
 
-clust_recomb_df = pd.read_csv("hvgs vs opt genes cluster recombination.csv")
 
-ax.plot(clust_recomb_df['all_n_labels_HVGs'], clust_recomb_df['all_accs_HVGs'])
-ax.plot(clust_recomb_df['all_n_labels_opt'], clust_recomb_df['all_accs_opt'])
+ax.plot(hvgs_24_n_labels, hvgs_24_accs, label='HVGs')
+ax.plot(opt_24_n_labels, opt_24_accs, label='optimized')
 plt.xlabel("# cluster groups")
 plt.ylabel("Accuracy")
-plt.title("Optimized panel, scRNAseq cross-validation of KNN classifier (99% acc at 17 cgs)")
+plt.legend()
+plt.title("12 genes, k=5 supercells")
 
 # %%
 

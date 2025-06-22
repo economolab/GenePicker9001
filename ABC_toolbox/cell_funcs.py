@@ -9,6 +9,8 @@ import random
 import numpy as np
 import pandas as pd
 
+from ABC_toolbox import gene_funcs
+
 from sklearn.model_selection import StratifiedKFold
 from tqdm import tqdm
 
@@ -69,6 +71,42 @@ def bootstrap_scRNAseq(meta, exp, freqs, n=1000):
 
     return boot_mat, boot_meta
 
+def bootstrap_scRNAseq_splits(supers, freqs, n=1000):
+    
+    """
+
+    """
+    
+    n_splits = len(supers)
+    n_train = round(((n_splits - 1) / n_splits) * n)
+    n_test = round((1 / n_splits) * n)
+    
+    boots = []
+    
+    for super_ in tqdm(supers, desc="Bootstrapping data..."):
+        
+        exp_train = super_[0][0]
+        meta_train = super_[0][1]
+        exp_test = super_[1][0]
+        meta_test = super_[1][1]
+        
+        exp_train_boot, meta_train_boot = bootstrap_scRNAseq(meta_train, 
+                                                             exp_train, 
+                                                             freqs, 
+                                                             n=n_train)
+        
+        exp_test_boot, meta_test_boot = bootstrap_scRNAseq(meta_test, 
+                                                           exp_test, 
+                                                           freqs, 
+                                                           n=n_test)
+        
+        train_tuple = (exp_train_boot, meta_train_boot)
+        test_tuple = (exp_test_boot, meta_test_boot)
+        
+        boots.append((train_tuple, test_tuple))
+        
+    return boots
+
 def calc_frac_per_type(meta, level='cluster'):
     
     # find every unique cell type of the prescribed level in this metadata dataframe
@@ -113,7 +151,7 @@ def boot_super(exp, meta, k=5, boot_factor=2):
     exp_super = []
     meta_super = []
     
-    for clu in tqdm(uniq_clu):
+    for clu in tqdm(uniq_clu, desc="Bootstrapping supercells for each cluster..."):
         
         mask = (cluster == clu)
         meta_clu = meta[mask]
@@ -132,6 +170,38 @@ def boot_super(exp, meta, k=5, boot_factor=2):
     meta_super = pd.DataFrame(meta_super)
     
     return exp_super, meta_super
+
+# boot super cells with pre split data
+def boot_super_splits(exp, meta, splits, k=5, boot_factor=2):
+    
+    supers = []
+    
+    for split in tqdm(splits, desc="Boostrapping supercells for a split..."):
+        
+        train = split[0]
+        test = split[1]
+        
+        exp_train = exp[train,:]
+        meta_train = meta.iloc[train]
+        exp_test = exp[test,:]
+        meta_test = meta.iloc[test,:]
+        
+        exp_super_train, meta_super_train = boot_super(exp_train, 
+                                                       meta_train, 
+                                                       k=k, 
+                                                       boot_factor=boot_factor)
+        
+        exp_super_test, meta_super_test = boot_super(exp_test, 
+                                                     meta_test, 
+                                                     k=k, 
+                                                     boot_factor=boot_factor)
+        
+        train_tuple = (exp_super_train, meta_super_train)
+        test_tuple = (exp_super_test, meta_super_test)
+        
+        supers.append((train_tuple, test_tuple))
+    
+    return supers
 
 # filter cell types that don't have at least k cells
 def filt_cells(exp, meta, k=5):
@@ -152,9 +222,9 @@ def filt_cells(exp, meta, k=5):
     return exp, meta
 
 # K fold train-test split cells
-def K_fold_cells(exp, meta, k=5, level='cluster'):
+def K_fold_cells(meta, k=5, level='cluster'):
     
-    skf = StratifiedKFold(n_splits=k)
+    skf = StratifiedKFold(n_splits=k, shuffle=True)
     
     # total number of cells
     n_samples = len(meta)
@@ -162,7 +232,12 @@ def K_fold_cells(exp, meta, k=5, level='cluster'):
     X = np.zeros(n_samples)
     y = meta[level].values
     
-    train, test = 
+    splits_gen = skf.split(X, y)
     
+    splits = []
+    for split in splits_gen:
+        splits.append(split)
+    
+    return splits    
     
     

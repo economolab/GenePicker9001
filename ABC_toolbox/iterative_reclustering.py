@@ -18,6 +18,8 @@ from sklearn.model_selection import StratifiedKFold
 import random
 import pandas as pd
 
+from ABC_toolbox import classify_cells
+
 from anndata import AnnData
 from tqdm import tqdm
 
@@ -115,7 +117,8 @@ def mix_labels(labels, new_groups):
     
     return labels
 
-# 
+# returns a dict where keys are clusters and values are the cluster group that 
+# cluster belongs to
 def build_clu_mapping(labels, labels_mix):
     
     clu_mapping = {}
@@ -290,6 +293,64 @@ def gen_test_classifier(meta, exp, ratios, clu_mapping=None):
         cms.append(cm)
     
     return np.mean(accs), np.mean(sparsities), cms, labels
+
+def iterative_recluster_splits(data, freqs, genes=None, acc_thresh=0.99):
+    
+    clu_mapping = None
+    final_cm = None
+    final_labels = None
+    
+    all_accs = []
+    all_n_labels = []
+    
+    acc = 0
+    while acc < acc_thresh:
+        
+        full_cms = []
+        accs = []
+        
+        
+        res = classify_cells.cross_val_classifier_splits(data,  
+                                                         freqs,
+                                                         genes=genes,
+                                                         clu_mapping=clu_mapping)
+        labels = res['labels'][0]
+        labels = [str(el) for el in labels]
+        all_n_labels.append(len(labels))
+        
+        acc = np.mean(res["accs"])
+        all_accs.append(acc)
+        
+        cms = res['cms']
+        full_cm = np.stack(cms)
+        full_cm = np.sum(full_cm, axis=0)
+        full_cms.append(full_cm)
+        
+        # convert confusion matrix to percentage per row
+        full_cm = full_cm.astype(float)
+        for i in range(full_cm.shape[0]):
+            full_cm[i,:] = full_cm[i,:] / sum(full_cm[i,:])
+        
+        if acc >= acc_thresh:
+            final_cm = full_cm
+            final_labels = labels
+            break
+            
+        dm = C2D(full_cm)
+            
+        new_groups = recluster(dm)
+        new_labels = mix_labels(labels, new_groups)
+        clu_mapping = build_clu_mapping(labels, new_labels)
+        
+        print(acc)
+        print(len(new_labels))
+        
+        if len(new_labels) <= 1:
+            final_cm = full_cm
+            final_labels = labels
+            break
+    
+    return final_labels, final_cm, all_accs, all_n_labels
 
 def iterative_recluster(meta, exp, ratios, acc_thresh=0.99):
     

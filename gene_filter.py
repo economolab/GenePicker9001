@@ -10,18 +10,19 @@ from sklearn.preprocessing import MinMaxScaler
 
 from ABC_toolbox import ABC_utils, gene_funcs
 
-def filt_genes(exp, meta, freqs, top_n=200, rdr_weight=(1/3), var_E_weight=(2/3), level='cluster'):
+def filt_genes(exp, meta, freqs, top_n=200, rdr_weight=(1/3), var_E_weight=(2/3), level='cluster',
+               rdr_N=10, var_E_N=2):
     
     genes = ABC_utils.load_gene("scRNAseq")
     
-    rdrs = gene_funcs.calc_rdr(exp, meta, freqs)
+    rdrs = gene_funcs.calc_rdr(exp, meta, freqs, N=rdr_N)
     
     # set Malat1 RDR to the second highest RDR because it's always a bit of an outlier
     Malat1_idx = np.where(genes == 'Malat1')[0][0]
     second_highest = np.max(rdrs[np.arange(len(rdrs)) != Malat1_idx])
     rdrs[Malat1_idx] = second_highest
     
-    var_Es = gene_funcs.calc_var_E(exp, meta, freqs, N=2, level=level)
+    var_Es = gene_funcs.calc_var_E(exp, meta, freqs, N=var_E_N, level=level)
     
     data_dict = {}
 

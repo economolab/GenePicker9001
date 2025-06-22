@@ -4,6 +4,7 @@ Genetic algorithm functions
 """
 
 import logging
+import os
 import pygad
 import random
 
@@ -15,7 +16,8 @@ from sklearn.metrics import pairwise_distances
 import numpy as np
 import pandas as pd
 
-from ABC_toolbox import classify_cells
+from ABC_toolbox import classify_cells, gene_funcs, cell_funcs
+from gene_filter import filt_genes
 
 # %%
 
@@ -66,11 +68,10 @@ def fitness_func(ga_instance, solution, solution_idx):
         set_genes = [str(el) for el in ga_instance.set_genes]
         gene_subset.extend(set_genes)
     
-    res = classify_cells.cross_val_classifier(ga_instance.meta, 
-                                              ga_instance.exp, 
-                                              ga_instance.freqs, 
-                                              genes=gene_subset,
-                                              verbose=False)
+    res = classify_cells.cross_val_classifier_splits(ga_instance.data,  
+                                                     ga_instance.freqs, 
+                                                     genes=gene_subset,
+                                                     verbose=False)
     
     acc = np.mean(res["accs"])
     sparsity = np.mean(res["sparsities"])
@@ -123,6 +124,10 @@ def build_logger():
     name = 'logfile.txt'
     
     logger = logging.getLogger(name)
+    
+    if (logger.hasHandlers()):
+        logger.handlers.clear()
+    
     logger.setLevel(level)
     
     file_handler = logging.FileHandler(name,'a+','utf-8')
@@ -139,7 +144,7 @@ def build_logger():
     
     return logger
 
-def run_ga(meta, exp, freqs, top_genes, 
+def run_ga(data, freqs, top_genes, 
             init_copies=2,
             num_generations=100,
             num_genes=12,
@@ -201,8 +206,7 @@ def run_ga(meta, exp, freqs, top_genes,
                            on_generation=on_generation,
                            logger=logger)
     
-    ga_instance.meta = meta
-    ga_instance.exp = exp
+    ga_instance.data = data
     ga_instance.freqs = freqs
     ga_instance.gene_names = top_genes
     ga_instance.set_genes = set_genes
@@ -211,7 +215,113 @@ def run_ga(meta, exp, freqs, top_genes,
     
     gene_df_ga, sol_df_ga = collate_ga_results(ga_instance, top_genes)
     
-    return gene_df_ga, sol_df_ga, ga_instance
+    return gene_df_ga, sol_df_ga
+
+def find_genes(meta, exp, freqs, num_genes=24, num_generations=100, num_iter=10,
+               set_genes=None, filt_order=[1000, 500, 200, 100], supercell_k=5,
+               boot_n=5000, n_splits=5, init_copies=2, mutation_probability=[0.5, 0],
+               rdr_N=10, var_E_N=2,
+               save_dir=r'C:\\Users\\jpv88\\Documents\\GenePicker9001_data'):
+    
+    def find_tested_genes(gene_df_gas):
+        
+        tested_genes = []
+        for gene_df in gene_df_gas:
+            tested_genes.extend(gene_df['gene'].values)
+            
+        tested_genes = np.unique(tested_genes)
+        
+        return tested_genes
+    
+    def score_genes(gene_df_gas, tested_genes):
+        
+        gene_scores = []
+        
+        for gene in tested_genes:
+            scores = []
+            occurences = []
+            
+            for gene_df in gene_df_ga:
+                
+                if gene in gene_df['gene'].values:
+                    scores.append(gene_df['fitnesses'][gene_df['gene'] == gene].values[0])
+                    occurences.append(gene_df['occurences'][gene_df['gene'] == gene].values[0])
+                    
+            gene_scores.append(np.average(scores, weights=occurences))
+            
+        return gene_scores
+    
+    def save_res(final_gene_df, gene_df_gas, sol_df_gas, top_n):
+            
+        for j, df in enumerate(gene_df_gas):
+            fname = f"gene_df_{top_n}_{j}.csv"
+            df.to_csv(os.path.join(save_dir, fname))
+            
+        for j, df in enumerate(sol_df_gas):
+            fname = f"sol_df_{top_n}_{j}.csv"
+            df.to_csv(os.path.join(save_dir, fname))
+            
+        fname = f"final_gene_df_{top_n}.csv"
+        final_gene_df.to_csv(os.path.join(save_dir, fname))
+        
+    exp = gene_funcs.normalize_counts_to_median(exp)
+    
+    # whether algorithm is currently on the first round of gene filtering
+    first_round_flag = True
+    
+    # rounds of genetic algorithm filtering
+    for i in range(len(filt_order)):
+        
+        top_n = filt_order[i]
+        
+        gene_df_gas = []
+        sol_df_gas = []
+            
+        # iterations per round of filtering
+        for _ in range(num_iter):
+            
+            if first_round_flag == True:
+                
+                exp_super, meta_super = cell_funcs.boot_super(exp, meta)
+                gene_df, top_genes = filt_genes(exp_super, meta_super, freqs,
+                                                top_n=top_n, rdr_N=rdr_N, var_E_N=var_E_N)
+                
+            splits = cell_funcs.K_fold_cells(meta, k=n_splits)
+            supers = cell_funcs.boot_super_splits(exp, meta, splits, k=supercell_k)
+            
+            # bootstrap distributions from scRNAseq that match MERFISH frequencies
+            boots = cell_funcs.bootstrap_scRNAseq_splits(supers, freqs, n=boot_n)
+            
+            data, freqs = classify_cells.preprocess_data_splits(boots, freqs)
+            
+            gene_df_ga, sol_df_ga = run_ga(data, freqs, top_genes,
+                                           num_genes=num_genes,
+                                           num_generations=num_generations,
+                                           init_copies=init_copies,
+                                           mutation_probability=mutation_probability,
+                                           set_genes=set_genes)
+            
+            gene_df_gas.append(gene_df_ga)
+            sol_df_gas.append(sol_df_ga)
+        
+        tested_genes = find_tested_genes(gene_df_gas)
+        gene_scores = score_genes(gene_df_gas, tested_genes)
+        
+        final_gene_df = {}
+        final_gene_df['gene'] = tested_genes
+        final_gene_df['score'] = gene_scores
+        final_gene_df = pd.DataFrame(data=final_gene_df)
+        
+        save_res(final_gene_df, gene_df_gas, sol_df_gas, top_n)
+        
+        # if not the last iteration
+        if i != (len(filt_order) - 1):
+            final_gene_df_filt = final_gene_df.nlargest(filt_order[i + 1], 'score')
+            top_genes = final_gene_df_filt['gene'].values
+        
+        if first_round_flag == True:
+            first_round_flag = False
+    
 
 def jaccard_distance(A, B):
     

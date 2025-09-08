@@ -11,6 +11,7 @@ import scanpy as sc
 import scipy as sp
 
 from anndata import AnnData, ImplicitModificationWarning
+from multiprocessing import Pool, cpu_count
 from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.model_selection import StratifiedKFold
@@ -128,7 +129,11 @@ def preprocess_exp(exp, scaler=None, return_scaler=False):
     
 
 # make sure bootstrapped data is ready to be input to a classifier
-def preprocess_data_splits(boots, freqs):
+def preprocess_data_splits(boots, freqs, clu_mapping=None):
+    
+    # convert freqs to cluster mapping specific freqs
+    if clu_mapping is not None:
+        freqs = cell_funcs.freqs_to_cm_freqs(freqs, clu_mapping)
     
     data = []
     
@@ -143,24 +148,18 @@ def preprocess_data_splits(boots, freqs):
         test_exp = preprocess_exp(test_exp, scaler=train_scaler)
         
         exp = np.concatenate((train_exp, test_exp), axis=0)
-        exp = pd.DataFrame(data=exp)
-        
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=ImplicitModificationWarning)
-            adata = AnnData(exp)
-        
-        all_genes = ABC_utils.load_gene("scRNAseq")
-        adata.var_names = all_genes
-        adata.var_names_make_unique()
-        
+
         batch = np.concatenate((np.repeat('train', len(train_meta)),
                                 np.repeat('test', len(test_meta))))
-        adata.obs['batch'] = batch
         
         meta = pd.concat((train_meta, test_meta))
         meta['batch'] = batch
         
-        data.append((adata, meta))
+        if clu_mapping is not None:
+            new_clus = [clu_mapping[clu] for clu in meta['cluster'].values]
+            meta['cluster'] = new_clus
+        
+        data.append((exp, meta))
         
     return data, freqs
 
@@ -186,8 +185,7 @@ def gini(array):
 
 # cross-validate a classifier
 def cross_val_classifier_splits(data, freqs,
-                                genes=None, clf_method='knn', verbose=True, 
-                                clu_mapping=None):
+                                genes=None, clf_method='knn', verbose=True):
     
     """
     Parameters
@@ -215,22 +213,19 @@ def cross_val_classifier_splits(data, freqs,
     
     n_splits = len(data)
     
-    # convert freqs to cluster mapping specific freqs
-    if clu_mapping is not None:
-        freqs = cell_funcs.freqs_to_cm_freqs(freqs, clu_mapping)
-    
     split_dicts = []
+        
     for i in tqdm(range(n_splits), desc="Preprocessing splits...") if verbose else range(n_splits):
         
         exp = data[i][0]
         meta = data[i][1]
         
-        train_mask = (exp.obs['batch'].values == 'train')
-        test_mask = (exp.obs['batch'].values == 'test')
-        gene_mask = np.array([gene in genes for gene in exp.var_names.values])
+        train_mask = (meta['batch'].values == 'train')
+        test_mask = (meta['batch'].values == 'test')
+        gene_mask = np.array([gene in genes for gene in ABC_utils.load_gene("scRNAseq")])
         
-        exp_train = exp.X[train_mask,:]
-        exp_test = exp.X[test_mask,:]
+        exp_train = exp[train_mask,:]
+        exp_test = exp[test_mask,:]
         
         exp_train = exp_train[:,gene_mask]
         exp_test = exp_test[:,gene_mask]
@@ -242,10 +237,6 @@ def cross_val_classifier_splits(data, freqs,
         pca = PCA(n_components=n_components)
         exp_train = pca.fit_transform(exp_train)
         exp_test = pca.transform(exp_test)
-        
-        if clu_mapping is not None:
-            new_clus = [clu_mapping[clu] for clu in meta['cluster'].values]
-            meta['cluster'] = new_clus
         
         split_dict = {}
         split_dict['X_train'] = exp_train

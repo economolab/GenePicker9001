@@ -18,12 +18,13 @@ from sklearn.model_selection import StratifiedKFold
 import random
 import pandas as pd
 
-from ABC_toolbox import classify_cells
+from ABC_toolbox import classify_cells, cell_funcs
 
 from anndata import AnnData
 from tqdm import tqdm
 
 import scipy as sp
+from scipy.stats import entropy
 
 # convert confusion matrix into distance matrix
 # expects confusion matrix normalized over the true conditions (each row sums to 1)
@@ -294,14 +295,14 @@ def gen_test_classifier(meta, exp, ratios, clu_mapping=None):
     
     return np.mean(accs), np.mean(sparsities), cms, labels
 
-def iterative_recluster_splits(data, freqs, genes=None, acc_thresh=0.99):
+def iterative_recluster_splits(boots, freqs, genes=None, acc_thresh=0.99, clu_mapping=None):
     
-    clu_mapping = None
     final_cm = None
     final_labels = None
     
     all_accs = []
     all_n_labels = []
+    bits = []
     
     acc = 0
     while acc < acc_thresh:
@@ -309,17 +310,24 @@ def iterative_recluster_splits(data, freqs, genes=None, acc_thresh=0.99):
         full_cms = []
         accs = []
         
+        data, cm_freqs = classify_cells.preprocess_data_splits(boots, freqs, clu_mapping=clu_mapping)
         
         res = classify_cells.cross_val_classifier_splits(data,  
-                                                         freqs,
-                                                         genes=genes,
-                                                         clu_mapping=clu_mapping)
+                                                         cm_freqs,
+                                                         genes=genes)
         labels = res['labels'][0]
         labels = [str(el) for el in labels]
         all_n_labels.append(len(labels))
         
         acc = np.mean(res["accs"])
         all_accs.append(acc)
+        
+        if clu_mapping is not None:
+            cm_freqs = cell_funcs.freqs_to_cm_freqs(freqs, clu_mapping)
+            S = entropy(list(cm_freqs.values()), base=2)
+        else:
+            S = entropy(list(freqs.values()), base=2)
+        bits.append(S)
         
         cms = res['cms']
         full_cm = np.stack(cms)
@@ -330,6 +338,7 @@ def iterative_recluster_splits(data, freqs, genes=None, acc_thresh=0.99):
         full_cm = full_cm.astype(float)
         for i in range(full_cm.shape[0]):
             full_cm[i,:] = full_cm[i,:] / sum(full_cm[i,:])
+        full_cm[np.isnan(full_cm)] = 0
         
         if acc >= acc_thresh:
             final_cm = full_cm
@@ -350,7 +359,7 @@ def iterative_recluster_splits(data, freqs, genes=None, acc_thresh=0.99):
             final_labels = labels
             break
     
-    return final_labels, final_cm, all_accs, all_n_labels
+    return final_labels, final_cm, all_accs, all_n_labels, bits
 
 def iterative_recluster(meta, exp, ratios, acc_thresh=0.99):
     

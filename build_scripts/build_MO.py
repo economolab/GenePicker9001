@@ -10,11 +10,11 @@ import numpy as np
 
 import params
 
-from ABC_toolbox import cell_funcs, data_nav
+from ABC_toolbox import cell_funcs, data_nav, gene_funcs
 
 # %% load IRN and PARN MERFISH metadata, remove non-neuronal cells
 
-roi = ['IRN', 'PARN']
+roi = ['MOp', 'MOs']
 level = 'structure'
 
 MERFISH_meta = data_nav.load_meta('MERFISH')
@@ -35,14 +35,6 @@ MERFISH_meta = data_nav.extract_MERFISH_meta(MERFISH_meta,
 
 # remove junk column
 MERFISH_meta.drop(columns=["Unnamed: 0"], inplace=True)
-
-# %% restrict to anterior IRN/PARN
-
-# x <= 11.1 for anterior IRN/PARN
-
-bool_mask = (MERFISH_meta["x_ccf"] <= 11.1)
-MERFISH_meta = MERFISH_meta.iloc[MERFISH_meta.index[bool_mask]]
-MERFISH_meta.reset_index(drop=True, inplace=True)
 
 # %% cut rare cell types from MERFISH metadata
 
@@ -69,7 +61,7 @@ MERFISH_meta.reset_index(drop=True, inplace=True)
 clusters = np.unique(MERFISH_meta["cluster"].values)
 
 scRNAseq_meta = data_nav.load_meta('scRNAseq')
-scRNAseq_data = data_nav.fetch_scRNAseq(clusters, scRNAseq_meta, form='raw')
+scRNAseq_data = data_nav.fetch_scRNAseq(clusters, scRNAseq_meta, form='raw', neur_frac=0.1)
 
 scRNAseq_meta, scRNAseq_raw = scRNAseq_data
 scRNAseq_meta.reset_index(drop=True, inplace=True)
@@ -101,17 +93,39 @@ MERFISH_meta.reset_index(drop=True, inplace=True)
 # %% write scRNAseq data and MERFISH frequencies
 
 # save scRNAseq raw expression data
-np.save(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw"), scRNAseq_raw)
+np.save(os.path.join(params.local_data_dir, "MO-scRNAseq-raw"), scRNAseq_raw)
 
 # save scRNAseq metadata
-scRNAseq_meta.to_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-meta.csv"),
+scRNAseq_meta.to_csv(os.path.join(params.local_data_dir, "MO-scRNAseq-meta.csv"),
                                   index=False)
 
 # save MERFISH frequencies
 MERFISH_freqs = cell_funcs.calc_frac_per_type(MERFISH_meta)
-with open(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"), 'wb') as handle:
+with open(os.path.join(params.local_data_dir, "MO-MERFISH-freqs.pkl"), 'wb') as handle:
     pickle.dump(MERFISH_freqs, handle, protocol=pickle.HIGHEST_PROTOCOL)
     
+# save normalized scRNaseq data
+exp_norm = gene_funcs.normalize_counts_to_median(scRNAseq_raw)
+np.save(os.path.join(params.local_data_dir, "MO-scRNAseq-norm"), exp_norm)
+
+# %%
+
+import pandas as pd
+
+MO_cluster_freqs = cell_funcs.calc_frac_per_type(MERFISH_meta, level='cluster')
+MO_supertype_freqs = cell_funcs.calc_frac_per_type(MERFISH_meta, level='supertype')
+MO_subclass_freqs = cell_funcs.calc_frac_per_type(MERFISH_meta, level='subclass')
+MO_class_freqs = cell_funcs.calc_frac_per_type(MERFISH_meta, level='class')
+
+MO_cluster_freqs_df = pd.DataFrame(data={'cluster': list(MO_cluster_freqs.keys()), 'proportion': list(MO_cluster_freqs.values())})
+MO_supertype_freqs_df = pd.DataFrame(data={'supertype': list(MO_supertype_freqs.keys()), 'proportion': list(MO_supertype_freqs.values())})
+MO_subclass_freqs_df = pd.DataFrame(data={'subclass': list(MO_subclass_freqs.keys()), 'proportion': list(MO_subclass_freqs.values())})
+MO_class_freqs_df = pd.DataFrame(data={'class': list(MO_class_freqs.keys()), 'proportion': list(MO_class_freqs.values())})
+
+MO_cluster_freqs_df.to_csv("MO_cluster_freqs.csv", index=False)
+MO_supertype_freqs_df.to_csv("MO_supertype_freqs.csv", index=False)
+MO_subclass_freqs_df.to_csv("MO_subclass_freqs.csv", index=False)
+MO_class_freqs_df.to_csv("MO_class_freqs.csv", index=False)
 
 # %% identifying guess of injection coordinates for anterior IRN and PARN
 
@@ -168,29 +182,5 @@ bound = data_nav.load_image_boundaries()
 
 with open('parcellation_dict.pickle', 'rb') as handle:
     parc_dict = pickle.load(handle)
-    
-# %% load IRN and PARN MERFISH metadata, remove non-neuronal cells
-
-roi = ['MRN']
-level = 'structure'
-
-MERFISH_meta = data_nav.load_meta('MERFISH')
-
-MERFISH_meta = data_nav.extract_MERFISH_meta(MERFISH_meta, 
-                                              roi, 
-                                              kind='restrict',
-                                              category='anatomy',
-                                              level=level)
-
-non_neuronal = ['30 Astro-Epen', '31 OPC-Oligo', '32 OEC', '33 Vascular', '34 Immune']
-
-MERFISH_meta = data_nav.extract_MERFISH_meta(MERFISH_meta, 
-                                              non_neuronal, 
-                                              kind='remove',
-                                              category='taxonomy',
-                                              level='class')
-
-# remove junk column
-MERFISH_meta.drop(columns=["Unnamed: 0"], inplace=True)
 
 

@@ -83,6 +83,10 @@ def bootstrap_scRNAseq_splits(supers, freqs, n=1000):
     
     boots = []
     
+    freqs_cutoff = n_splits / n
+    freqs = {k: v for k, v in freqs.items() if v >= freqs_cutoff}
+    freqs = {k: v/sum(freqs.values()) for k, v in freqs.items()}
+    
     for super_ in tqdm(supers, desc="Bootstrapping data..."):
         
         exp_train = super_[0][0]
@@ -159,7 +163,7 @@ def boot_super(exp, meta, k=5, boot_factor=2):
         exp_clu = exp[mask,:]
         n_real_cells = exp_clu.shape[0]
         
-        for _ in range(n_real_cells*boot_factor):
+        for _ in range(max(1, round(n_real_cells*boot_factor))):
             
             idx = random.choices(range(n_real_cells), k=k)
             exps = [exp_clu[i,:] for i in idx]

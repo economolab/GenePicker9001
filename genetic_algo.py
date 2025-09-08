@@ -16,7 +16,7 @@ from sklearn.metrics import pairwise_distances
 import numpy as np
 import pandas as pd
 
-from ABC_toolbox import classify_cells, gene_funcs, cell_funcs
+from ABC_toolbox import ABC_utils, classify_cells, gene_funcs, cell_funcs
 from gene_filter import filt_genes
 
 # %%
@@ -185,6 +185,9 @@ def run_ga(data, freqs, top_genes,
         ga_instance.logger.info(f"Generation = {ga_instance.generations_completed}")
         ga_instance.logger.info(f"Fitness    = {ga_instance.best_solution(pop_fitness=ga_instance.last_generation_fitness)[1]}")
     
+    def on_start(ga_instance):
+        ga_instance.logger.info("Calculating initial population fitness...")
+    
     ga_instance = pygad.GA(num_generations=num_generations,
                            num_parents_mating=num_parents_mating,
                            fitness_func=fitness_func,
@@ -204,6 +207,7 @@ def run_ga(data, freqs, top_genes,
                            suppress_warnings=True,
                            allow_duplicate_genes=allow_duplicate_genes,
                            on_generation=on_generation,
+                           on_start=on_start,
                            logger=logger)
     
     ga_instance.data = data
@@ -221,7 +225,8 @@ def find_genes(meta, exp, freqs, num_genes=24, num_generations=100, num_iter=10,
                set_genes=None, filt_order=[1000, 500, 200, 100], supercell_k=5,
                boot_n=5000, n_splits=5, init_copies=2, mutation_probability=[0.5, 0],
                rdr_N=10, var_E_N=2,
-               save_dir=r'C:\\Users\\jpv88\\Documents\\GenePicker9001_data'):
+               save_dir=r'C:\\Users\\jpv88\\Documents\\GenePicker9001_data',
+               skip_heur=False, clu_mapping=None):
     
     def find_tested_genes(gene_df_gas):
         
@@ -241,7 +246,7 @@ def find_genes(meta, exp, freqs, num_genes=24, num_generations=100, num_iter=10,
             scores = []
             occurences = []
             
-            for gene_df in gene_df_ga:
+            for gene_df in gene_df_gas:
                 
                 if gene in gene_df['gene'].values:
                     scores.append(gene_df['fitnesses'][gene_df['gene'] == gene].values[0])
@@ -282,9 +287,16 @@ def find_genes(meta, exp, freqs, num_genes=24, num_generations=100, num_iter=10,
             
             if first_round_flag == True:
                 
-                exp_super, meta_super = cell_funcs.boot_super(exp, meta)
-                gene_df, top_genes = filt_genes(exp_super, meta_super, freqs,
-                                                top_n=top_n, rdr_N=rdr_N, var_E_N=var_E_N)
+                if skip_heur == False:
+                
+                    exp_super, meta_super = cell_funcs.boot_super(exp, meta)
+                    gene_df, top_genes = filt_genes(exp_super, meta_super, freqs,
+                                                    top_n=top_n, rdr_N=rdr_N, var_E_N=var_E_N)
+                elif skip_heur == True:
+                    
+                    all_genes = ABC_utils.load_gene("scRNAseq")
+                    top_genes = random.sample(list(all_genes), top_n)
+                    top_genes = np.array(top_genes)
                 
             splits = cell_funcs.K_fold_cells(meta, k=n_splits)
             supers = cell_funcs.boot_super_splits(exp, meta, splits, k=supercell_k)
@@ -292,9 +304,9 @@ def find_genes(meta, exp, freqs, num_genes=24, num_generations=100, num_iter=10,
             # bootstrap distributions from scRNAseq that match MERFISH frequencies
             boots = cell_funcs.bootstrap_scRNAseq_splits(supers, freqs, n=boot_n)
             
-            data, freqs = classify_cells.preprocess_data_splits(boots, freqs)
+            data, cm_freqs = classify_cells.preprocess_data_splits(boots, freqs, clu_mapping=clu_mapping)
             
-            gene_df_ga, sol_df_ga = run_ga(data, freqs, top_genes,
+            gene_df_ga, sol_df_ga = run_ga(data, cm_freqs, top_genes,
                                            num_genes=num_genes,
                                            num_generations=num_generations,
                                            init_copies=init_copies,
@@ -321,6 +333,8 @@ def find_genes(meta, exp, freqs, num_genes=24, num_generations=100, num_iter=10,
         
         if first_round_flag == True:
             first_round_flag = False
+    
+    return 'Evaluation complete'
     
 
 def jaccard_distance(A, B):

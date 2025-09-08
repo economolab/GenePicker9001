@@ -17,19 +17,69 @@ from tqdm import tqdm
 
 import params
 
-from ABC_toolbox import ABC_plot, ABC_utils, cell_funcs, classify_cells, gene_funcs, iterative_reclustering
+from ABC_toolbox import ABC_plot, ABC_utils, cell_funcs, classify_cells, gene_funcs, cluster_recombination
 from gene_filter import filt_genes
 from genetic_algo import run_ga
 
 # %%
 
-meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-NN-meta.csv"), low_memory=False)
-exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-NN-raw.npy"))
-freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-NN-freqs.pkl"))
+meta = pd.read_csv(os.path.join(params.local_data_dir, "MO-scRNAseq-NN-meta.csv"), low_memory=False)
+exp = np.load(os.path.join(params.local_data_dir, "MO-scRNAseq-NN-raw.npy"))
+freqs = pd.read_pickle(os.path.join(params.local_data_dir, "MO-MERFISH-NN-freqs.pkl"))
 
-exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=5)
+exp = gene_funcs.normalize_counts_to_median(exp)
 
-exp_super = gene_funcs.normalize_counts_to_median(exp_super)
+exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=5, boot_factor=0.5)
+
+exp_boot, meta_boot = cell_funcs.bootstrap_scRNAseq(meta_super, exp_super, freqs, 
+                                                    n=10000)
+
+non_neuronal = ['30 Astro-Epen', '31 OPC-Oligo', '32 OEC', '33 Vascular', '34 Immune']
+
+nn_mask = np.isin(meta_boot["class"], non_neuronal)
+nn_index = list(meta_boot.index[nn_mask])
+neuron_index = list(meta_boot.index[~nn_mask])
+
+neuron_exp = []
+nn_exp = []
+for j in tqdm(range(exp_boot.shape[1])):
+    neuron_exp.append(np.mean(exp_boot[neuron_index,j]))
+    nn_exp.append(np.mean(exp_boot[nn_index,j]))
+    
+ratio = np.array(neuron_exp) / np.array(nn_exp)
+nan_mask = np.isnan(ratio)
+ratio[nan_mask] = 0
+
+data = {}
+data["gene"] = ABC_utils.load_gene("scRNAseq")
+data["neuron_exp"] = neuron_exp
+data["nn_exp"] = nn_exp
+data["ratio"] = ratio
+
+gene_df = pd.DataFrame(data=data)
+gene_df.set_index('gene', inplace=True)
+gene_df.to_csv("nn_gene_df_MO.csv")
+
+# %%
+
+gene_df = pd.read_csv("nn_gene_df_MO.csv")
+nn_gene_dict = {}
+for i in range(len(gene_df)):
+    nn_gene_dict[gene_df["gene"][i]] = gene_df["ratio"][i]
+    
+final_gene_df = pd.read_csv("final_gene_df_2000.csv")
+final_gene_df_filt = final_gene_df.nlargest(1000, 'score')
+
+ratios_final_genes = []
+top_genes = final_gene_df_filt["gene"].values
+for gene in top_genes:
+    ratios_final_genes.append(nn_gene_dict[gene])
+    
+ratios_final_genes = np.array(ratios_final_genes)
+keep_mask = ratios_final_genes >= 1
+
+top_genes = top_genes[keep_mask]
+np.save("top_genes_767.npy", top_genes)
 
 # %%
 
@@ -66,7 +116,7 @@ meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-NN-
 exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-NN-raw.npy"))
 freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-NN-freqs.pkl"))
 
-exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=5)
+exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=3)
 
 exp_super = gene_funcs.normalize_counts_to_median(exp_super)
 
@@ -101,7 +151,26 @@ data["ratio"] = np.array(neuron_exp) / np.array(nn_exp)
 gene_df = pd.DataFrame(data=data)
 gene_df.set_index('gene', inplace=True)
 
+# %%
 
+# final_gene_df_1000 = pd.read_csv("heur_gene_df_2000.csv")
+t1000 = np.load("top_genes_2000.npy", allow_pickle=True)
+
+t1000_mask = np.array([gene in t1000 for gene in gene_df.index.values])
+
+gene_df_t1000 = gene_df[t1000_mask]
+pass_mask = gene_df_t1000['ratio'].values > 1
+gene_df_t1000_pass = gene_df_t1000[pass_mask]
+
+top_genes = gene_df_t1000_pass.index.values
+np.save("top_genes_1485.npy", top_genes)
+
+# %%
+
+t50 = pd.read_csv("final_gene_df_50.csv")
+top_genes = list(t50['gene'])
+top_genes = np.array(top_genes)
+np.save("top_genes_50.npy", top_genes)
 
 # %%
 

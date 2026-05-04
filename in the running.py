@@ -57,13 +57,12 @@ np.save("top_genes_135.npy", final)
 
 # %%
 
-df_0 = pd.read_csv("final_gene_df_100.csv")
-df_1 = pd.read_csv("final_gene_df_100_dupe1.csv")
-df_2 = pd.read_csv("final_gene_df_100_dupe2.csv")
-df_3 = pd.read_csv("final_gene_df_100_dupe3.csv")
-df_4 = pd.read_csv("final_gene_df_100_dupe4.csv")
+df_1 = pd.read_csv("final_gene_df_100_1.csv")
+df_2 = pd.read_csv("final_gene_df_100_2.csv")
+df_3 = pd.read_csv("final_gene_df_100_3.csv")
+df_4 = pd.read_csv("final_gene_df_100_4.csv")
 
-dfs = [df_0, df_1, df_2, df_3, df_4]
+dfs = [df_1, df_2, df_3, df_4]
 
 def find_tested_genes(gene_df_gas):
         

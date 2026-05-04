@@ -116,6 +116,10 @@ meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-NN-
 exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-NN-raw.npy"))
 freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-NN-freqs.pkl"))
 
+# meta = pd.read_csv(os.path.join(params.local_data_dir, "MO-scRNAseq-NN-meta.csv"), low_memory=False)
+# exp = np.load(os.path.join(params.local_data_dir, "MO-scRNAseq-NN-raw.npy"))
+# freqs = pd.read_pickle(os.path.join(params.local_data_dir, "MO-MERFISH-NN-freqs.pkl"))
+
 exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=3)
 
 exp_super = gene_funcs.normalize_counts_to_median(exp_super)
@@ -150,6 +154,19 @@ data["ratio"] = np.array(neuron_exp) / np.array(nn_exp)
 
 gene_df = pd.DataFrame(data=data)
 gene_df.set_index('gene', inplace=True)
+
+# %%
+
+heur_gene_df = pd.read_csv("heur_gene_df_2000.csv")
+heur_gene_df = heur_gene_df.nlargest(2000, 'score')
+
+heur_mask = np.array([gene in heur_gene_df['gene'].values for gene in gene_df.index.values])
+gene_df_filt = gene_df[heur_mask]
+pass_mask = gene_df_filt['ratio'].values > 1
+gene_df_filt_pass = gene_df_filt[pass_mask]
+top_genes = gene_df_filt_pass.index.values
+
+np.save("top_genes_heur.npy", top_genes)
 
 # %%
 

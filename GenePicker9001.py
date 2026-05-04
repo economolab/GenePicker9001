@@ -111,7 +111,7 @@ for _ in range(10):
     gene_df, top_genes = filt_genes(exp_super, meta_super, freqs, top_n=top_n)
     
     splits = cell_funcs.K_fold_cells(meta)
-    supers = cell_funcs.boot_super_splits(exp, meta, splits, k=5)
+    supers = cell_funcs.boot_super_splits(exp, meta, splits, k=3)
     
     # bootstrap distribution from scRNAseq that matches MERFISH frequencies
     boots = cell_funcs.bootstrap_scRNAseq_splits(supers, freqs, n=5000)
@@ -227,7 +227,7 @@ for _ in range(10):
     exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
     freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
     
-    exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=5)
+    exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=3)
     
     exp_super = gene_funcs.normalize_counts_to_median(exp_super)
     
@@ -498,11 +498,11 @@ top_genes = final_gene_df_filt['gene'].values
 
 # %%
 
-gene_df = pd.read_csv("final_gene_df_200.csv")
+gene_df = pd.read_csv("final_gene_df_100.csv")
 
-final_gene_df_filt = gene_df.nlargest(100, 'score')
+top_genes = gene_df['gene'].values
 
-top_genes = final_gene_df_filt['gene'].values
+np.save("top_genes_100.npy", top_genes)
 
 
 
@@ -527,7 +527,7 @@ for _ in range(10):
     exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
     freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
     
-    exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=5)
+    exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=3)
     
     exp_super = gene_funcs.normalize_counts_to_median(exp_super)
     
@@ -595,7 +595,7 @@ meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-met
 exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
 freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
 
-exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=5)
+exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=3)
 
 exp_super = gene_funcs.normalize_counts_to_median(exp_super)
 
@@ -629,17 +629,28 @@ plt.title("Initial heuristic rank of top 100 final genes")
 
 # %%
 
-ABC_plot.plot_gene("Nxph1", meta_boot, exp_boot, level='cluster')
+ABC_plot.plot_gene("Pcp4", meta_boot, exp_boot, level='cluster')
 
 # %%
 
+import random
 import matplotlib.pyplot as plt 
 
-genes = ['Alcam','Arpp21','Ebf3','Hoxb5','Meis2','Negr1','Nxph1','Pax2','Pcp4',
-         'Phox2b','Rab3c','Robo1','Rph3a','Slc17a6','Slc5a7','Slc6a5','Syt1',
-         'Tenm2','Tshz2','Zfhx3']
+# genes = ['Alcam','Arpp21','Ebf3','Hoxb5','Meis2','Negr1','Nxph1','Pax2','Pcp4',
+#          'Phox2b','Rab3c','Robo1','Rph3a','Slc17a6','Slc5a7','Slc6a5','Syt1',
+#          'Tenm2','Tshz2','Zfhx3']
 
-all_genes = ABC_utils.load_gene("scRNAseq")
+genes = ['Phox2b', 'Slc17a6', 'Slc6a5', 'Slc5a7', 'Zfhx3', 'Meis2', 'Tenm2', 
+         'Tshz2', 'Hoxb5', 'Ebf3', 'Ralyl', 'Rph3a', 'Syt1', 'Alcam', 'Arpp21', 'Pcp4']
+# genes_list = [['Phox2b', 'Tenm2', 'Ralyl'], ['Tshz2', 'Alcam', 'Arpp21'], ['Zfhx3', 'Meis2', 'Pcp4']]
+
+    
+rand_genes = False
+
+if rand_genes == True:
+    all_genes = ABC_utils.load_gene("scRNAseq")
+    
+    genes = random.sample(list(all_genes), 16)
 
 gene_idx = []
 for gene in genes:
@@ -683,7 +694,7 @@ R, idx_genes = cluster_corr(R, genes)
 
 
 fig, ax = plt.subplots()
-mappable = ax.imshow(R)
+mappable = ax.imshow(R, cmap='bwr')
 
 plt.gca().set_xticks(range(len(idx_genes)), idx_genes, rotation=45)
 plt.gca().set_yticks(range(len(idx_genes)), idx_genes, rotation=45)
@@ -767,7 +778,7 @@ adata_us.X = X
 sc.pp.highly_variable_genes(
     adata_us,
     flavor="seurat_v3",
-    n_top_genes=20
+    n_top_genes=16
 )
 
 hvgs = adata_us.var_names[adata_us.var['highly_variable']]
@@ -797,9 +808,16 @@ clu_mapping = cluster_recombination.build_clu_mapping(labels, labels_mix)
 #          'Phox2b','Rab3c','Robo1','Rph3a','Slc17a6','Slc5a7','Slc6a5','Syt1',
 #          'Tenm2','Tshz2','Zfhx3']
 
-genes = ['Fn1', 'Dbh', 'Ttn', 'Mafb', 'Kcnq4', 'Spp1', 'Cntnap2', 'Slc6a2',
-       'Cd24a', 'Meg3', 'Gm32004', 'Pcdh9', 'Lsamp', 'Gm42418', 'Ttr',
-       'Malat1', 'mt-Co1', 'mt-Co2', 'mt-Atp6', 'mt-Co3']
+# genes = ['Fn1', 'Dbh', 'Ttn', 'Mafb', 'Kcnq4', 'Spp1', 'Cntnap2', 'Slc6a2',
+#        'Cd24a', 'Meg3', 'Gm32004', 'Pcdh9', 'Lsamp', 'Gm42418', 'Ttr',
+#        'Malat1', 'mt-Co1', 'mt-Co2', 'mt-Atp6', 'mt-Co3']
+
+genes = ['Fn1', 'Kcnq4', 'Spp1', 'Cntnap2', 'Slc6a2', 'Cd24a', 'Meg3',
+       'Pcdh9', 'Lsamp', 'Gm42418', 'Ttr', 'Malat1', 'mt-Co1', 'mt-Co2',
+       'mt-Atp6', 'mt-Co3']
+
+# genes = ['Slc17a6', 'Tshz2', 'Phox2b', 'Ralyl', 'Rph3a', 'Pcp4', 'Meis2', 'Ebf3',
+#          'Slc6a5', 'Alcam', 'Tenm2', 'Celf2', 'Slc5a7', 'Zfhx3', 'Syt1', 'Hoxb5']
     
 meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-meta.csv"), low_memory=False)
 exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
@@ -817,7 +835,7 @@ final_labels, final_cm, all_accs, all_n_labels, bits = cluster_recombination.ite
                                                                                                    freqs,
                                                                                                    clu_mapping=clu_mapping,
                                                                                                    genes=genes, 
-                                                                                                   acc_thresh=1)
+                                                                                                   acc_thresh=0.99999)
 
 opt_n_labels = all_n_labels
 opt_accs = all_accs
@@ -842,7 +860,63 @@ reclust_df["accs"] = opt_accs
 reclust_df["bits"] = bits
 
 reclust_df = pd.DataFrame(data=reclust_df)
-reclust_df.to_csv("reclust_20_hvg.csv", index=False)
+reclust_df.to_csv("reclust_16_hvg.csv", index=False)
+
+# %%
+
+mix_targets = []
+
+# motor neurons
+mix_targets.append(('4601 HB Calcb Chol_1', '4603 HB Calcb Chol_3', '4604 HB Calcb Chol_4', '4605 HB Calcb Chol_5',
+                    '4553 DMX VII Tbx20 Chol_1', '4554 DMX VII Tbx20 Chol_1', '4555 DMX VII Tbx20 Chol_1'))
+
+# mossy fibers
+mix_targets.append(('4198 PG-TRN-LRN Fat2 Glut_1', '4199 PG-TRN-LRN Fat2 Glut_1'))
+
+labels = list(freqs.keys())
+new_groups = cluster_recombination.manual_recluster(labels, mix_targets)
+labels_mix = cluster_recombination.mix_labels(labels, new_groups)
+clu_mapping = cluster_recombination.build_clu_mapping(labels, labels_mix)
+
+import matplotlib.pyplot as plt
+from scipy.stats import entropy
+
+reclust_16_opt = pd.read_csv("reclust_16_opt.csv")
+reclust_16_hvg = pd.read_csv("reclust_16_hvg.csv")
+
+fig, ax = plt.subplots()
+
+ax.plot(reclust_16_opt["n_labels"], reclust_16_opt["accs"], label='16 optimized genes')
+ax.plot(reclust_16_hvg["n_labels"], reclust_16_hvg["accs"], label='16 highest variance genes')
+
+fig.legend()
+ax.set_xlabel("# cell types")
+ax.set_ylabel("Accuracy")
+ax.set_ylim((0, 1))
+ax.set_xlim((1,124))
+
+freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
+cm_freqs = cell_funcs.freqs_to_cm_freqs(freqs, clu_mapping)
+S = entropy(list(cm_freqs.values()), base=2)
+
+def extract_bit(df, acc_thresh=0.95):
+    
+    mask = df["accs"] >= acc_thresh
+    mask = mask.values
+    mask = list(mask)
+    idx = mask.index(True)
+
+    bits = df["bits"].iloc[idx]
+    return bits
+
+bit_16_opt = extract_bit(reclust_16_opt)
+bit_16_hvg = extract_bit(reclust_16_hvg)
+
+fig, ax = plt.subplots()
+ax.bar(['opt', 'hvg'], [bit_16_opt, bit_16_hvg])
+ax.set_ylabel("Bits of information")
+ax.axhline(S, 0, 1, c='k', ls='--')
+ax.set_ylim((0, 6.5))
 
 # %%
 

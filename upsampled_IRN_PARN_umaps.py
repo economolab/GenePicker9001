@@ -59,7 +59,6 @@ adata.obs["class"] = meta["class"].values
 adata.var_names = genes
 
 
-
 # %%
 
 scvi.model.SCVI.setup_anndata(adata, batch_key="batch")
@@ -228,9 +227,8 @@ adata_us.obs["class"] = _class
     
 # %%
 
-sc.pp.normalize_per_cell(                       
-     adata_us, key_n_counts='n_counts_all'
-)
+sc.pp.normalize_total(adata_us)
+# adata_us.X = np.round(adata_us.X).astype(np.uint16)
 
 sc.pp.highly_variable_genes(
     adata_us,
@@ -238,19 +236,26 @@ sc.pp.highly_variable_genes(
     n_top_genes=2000
 )
 
-sc.pp.log1p(adata_us)
-sc.pp.scale(adata_us)
+# adata_us.X = np.round(adata_us.X).astype(np.uint16)
 
-sc.pp.pca(adata_us)
+# %%
 
-sc.pp.neighbors(adata_us)
-sc.tl.umap(adata_us)
+adata_us_copy = sc.pp.log1p(adata_us, copy=True)
+sc.pp.scale(adata_us_copy)
+sc.pp.pca(adata_us_copy)
+sc.pp.neighbors(adata_us_copy)
+sc.tl.umap(adata_us_copy)
+adata_us.obsm['X_umap'] = adata_us_copy.obsm['X_umap']
+
+# %%
+
+adata_us.write_h5ad("antIRN-PARN-upsampled")
 
 # %%
 
 import matplotlib as mpl
 
-level = "cluster"
+level = "subclass"
 
 sc.pl.umap(adata_us, 
            color=level, 

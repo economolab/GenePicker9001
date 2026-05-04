@@ -9,7 +9,7 @@ import random
 import numpy as np
 import pandas as pd
 
-from ABC_toolbox import gene_funcs
+from ABC_toolbox import ABC_utils
 
 from sklearn.model_selection import StratifiedKFold
 from tqdm import tqdm
@@ -243,5 +243,23 @@ def K_fold_cells(meta, k=5, level='cluster'):
         splits.append(split)
     
     return splits    
+
+def recalc_freqs(freqs, new_level='subclass'):
+    
+    new_level_to_idx = {'supertype': 0, 'subclass': 1, 'class': 2}
+    idx = new_level_to_idx[new_level]
+    
+    new_types = []
+    
+    for key in freqs.keys():
+        new_types.append(str(ABC_utils.fetch_cluster_tax(key)[idx]))
+        
+    old_freqs = list(freqs.values())
+        
+    new_freqs = dict.fromkeys(new_types, 0)
+    for i, new_type in enumerate(new_types):
+        new_freqs[new_type] += old_freqs[i]
+    
+    return new_freqs
     
     

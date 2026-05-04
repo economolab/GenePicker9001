@@ -11,6 +11,7 @@ import params
 
 import colorsys
 import numpy as np
+import pandas as pd
 import scanpy as sc
 
 from anndata import AnnData, concat, read_h5ad
@@ -19,7 +20,7 @@ from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 
-from ABC_toolbox import ABC_utils, ABC_plot
+from ABC_toolbox import ABC_utils, ABC_plot, cell_funcs
 
 # N increase smoothness
 def smoothstep(x, x_min=0, x_max=1, N=5):
@@ -110,8 +111,10 @@ def calc_alpha_course(pre_alpha, post_alpha, num_points=1000, start_frac=0.2, en
 
 # %%
 
-adata_us = read_h5ad(os.path.join(params.local_data_dir, "antIRN-PARN-upsampled"))
-adata_us_24 = read_h5ad('adata_us_24')
+adata_us = read_h5ad("antIRN-PARN-upsampled")
+
+# adata_us = read_h5ad(os.path.join(params.local_data_dir, "antIRN-PARN-upsampled"))
+# adata_us_24 = read_h5ad('adata_us_24')
 
 # # %%
 
@@ -269,6 +272,70 @@ X_umap_new = scaler.fit_transform(X_umap_new)
 X_umap_old = X_umap.copy()
 X_umap_old[~np.array(outlier_mask)] = X_umap_new
 
+# %%
+
+exp_super, meta_super = cell_funcs.boot_super(adata_us.X, 
+                                              pd.DataFrame(adata_us.obs['cluster']),
+                                              k=3,
+                                              boot_factor=1)
+
+super_X = np.zeros(adata_us.X.shape)
+for clu in np.unique(adata_us.obs['cluster']):
+    
+    # where this clu is in the upsampled AnnData
+    adata_mask = (adata_us.obs['cluster'] == clu)
+    adata_mask = adata_mask.values
+    
+    # where this clu is in the supercells
+    super_mask = (meta_super['cluster'] == clu)
+    super_mask = super_mask.values
+
+    super_X[adata_mask,:] = exp_super[super_mask,:]  
+    
+adata_super = AnnData(super_X)
+
+genes = ABC_utils.load_gene("scRNAseq")
+adata_super.obs["cluster"] = adata_us.obs["cluster"].values
+adata_super.var_names = genes
+
+# make umap from anndata object without overwriting counts info
+def make_umap(adata, n_top_genes=2000):
+    
+    sc.pp.highly_variable_genes(
+        adata_us,
+        flavor="seurat_v3",
+        n_top_genes=n_top_genes
+    )
+    
+    adata_copy = sc.pp.log1p(adata, copy=True)
+    sc.pp.scale(adata_copy)
+    sc.pp.pca(adata_copy)
+    sc.pp.neighbors(adata_copy)
+    sc.tl.umap(adata_copy)
+    
+    adata.obsm['X_umap'] = adata_copy.obsm['X_umap']
+    
+    return adata
+
+adata_super = make_umap(adata_super)
+
+# %%
+
+start_umap = adata_us.obsm["X_umap"]
+end_umap = adata_super.obsm["X_umap"]
+
+from sklearn.preprocessing import MinMaxScaler
+
+def scale_umaps(start_umap, end_umap):
+    scaler = MinMaxScaler()
+
+    start_umap = scaler.fit_transform(start_umap)
+    end_umap = scaler.fit_transform(end_umap)
+    
+    return start_umap, end_umap
+
+start_umap, end_umap = scale_umaps(start_umap, end_umap)
+    
 
 # %%
 
@@ -286,10 +353,10 @@ y_courses = []
 # start_umap = X_umap
 # end_umap = X_umap
 
-start_umap = X_umap_24gene
-end_umap = X_umap
+# start_umap = X_umap_24gene
+# end_umap = X_umap
 
-for i in tqdm(range(X_umap.shape[0])):
+for i in tqdm(range(start_umap.shape[0])):
     
     pre_coords = start_umap[i,:]
     post_coords = end_umap[i,:]
@@ -308,11 +375,11 @@ def build_umap_frame(x_courses, y_courses, frame):
     
     return x_umap, y_umap
 
-level = "subclass"
+level = "cluster"
 colors_dict = ABC_plot.fetch_colors_dict(level)
 pre_colors = [colors_dict[el] for el in adata_us.obs[level]]
 
-level = "supertype"
+level = "cluster"
 colors_dict = ABC_plot.fetch_colors_dict(level)
 post_colors = [colors_dict[el] for el in adata_us.obs[level]]
 
@@ -320,7 +387,7 @@ r_courses = []
 g_courses = []
 b_courses = []
 
-for i in tqdm(range(X_umap.shape[0])):
+for i in tqdm(range(start_umap.shape[0])):
     
     pre_color = pre_colors[i]
     post_color = post_colors[i]
@@ -343,13 +410,13 @@ def build_umap_color(r_courses, g_courses, b_courses, frame):
     
     return umap_color
 
-pre_alphas = np.repeat(1, X_umap.shape[0])
+pre_alphas = np.repeat(1, start_umap.shape[0])
 post_alphas = pre_alphas.copy()
 pre_alphas[outlier_mask] = 0
 
 alpha_courses = []
 
-for i in tqdm(range(X_umap.shape[0])):
+for i in tqdm(range(start_umap.shape[0])):
     
     pre_alpha = pre_alphas[i]
     post_alpha = post_alphas[i]
@@ -383,8 +450,8 @@ def build_umap_alpha(alpha_courses, frame):
 
 # %% 
 
-change_colors = True
-change_position = False
+change_colors = False
+change_position = True
 change_alphas = False
 
 import matplotlib.animation as animation
@@ -398,11 +465,11 @@ ax.set_ylabel("UMAP 2", fontsize=24)
 ax.spines[['right', 'top']].set_visible(False)
 fig.tight_layout()
 
-level = "subclass"
+level = "cluster"
 colors_dict = ABC_plot.fetch_colors_dict(level)
 colors = [colors_dict[el] for el in adata_us.obs[level]]
 
-scat = ax.scatter(X_umap_24gene[:,0], X_umap_24gene[:,1], s=12, c=colors)
+scat = ax.scatter(start_umap[:,0], start_umap[:,1], s=12, c=colors)
 
 plt.savefig('pre_img', transparent=True)
 

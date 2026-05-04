@@ -48,12 +48,65 @@ bool_mask = np.isin(MERFISH_meta["cluster"], keep_clu)
 MERFISH_meta = MERFISH_meta.iloc[MERFISH_meta.index[bool_mask]]
 MERFISH_meta.reset_index(drop=True, inplace=True)
 
+# %%
+
+import pandas as pd
+
+MO_cluster_freqs = cell_funcs.calc_frac_per_type(MERFISH_meta, level='cluster')
+
+thresh = 0.0001
+good_clusters = []
+for key, value in MO_cluster_freqs.items():
+    if value > thresh:
+        good_clusters.append(key)
+        
+# cut those cells from the MERFISH metadata too
+bool_mask = np.isin(MERFISH_meta["cluster"], good_clusters)
+MERFISH_meta = MERFISH_meta.iloc[MERFISH_meta.index[bool_mask]]
+MERFISH_meta.reset_index(drop=True, inplace=True)
+
+freqs = cell_funcs.calc_frac_per_type(MERFISH_meta, level='cluster')
+old_freqs = freqs.copy()
+
+inhib_kws = ["Vip Gaba", "Sncg Gaba", "Lamp5 Gaba", "Lamp5 Lhx6", 
+             "Pvalb chandelier", "Pvalb Gaba", "Sst Gaba", "Sst Chodl"]
+
+inhib_scale = 2
+
+inhib_sum = 0
+excit_sum = 0
+for key, val in freqs.items():
+    
+    check_inhib = []
+    for inhib_kw in inhib_kws:
+        check_inhib.append(inhib_kw in key)
+        
+    if any(check_inhib):
+        freqs[key] = inhib_scale * val
+        inhib_sum += inhib_scale * val
+    else:
+        excit_sum += val
+    
+excit_target_sum = 1 - inhib_sum
+s = excit_target_sum / excit_sum
+
+for key, val in freqs.items():
+    
+    check_inhib = []
+    for inhib_kw in inhib_kws:
+        check_inhib.append(inhib_kw in key)
+        
+    if any(check_inhib):
+        pass
+    else:
+        freqs[key] = s * val
+
 # %% fetch scRNAseq metadata and raw counts for antIRN-PARN
 
 clusters = np.unique(MERFISH_meta["cluster"].values)
 
 scRNAseq_meta = data_nav.load_meta('scRNAseq')
-scRNAseq_data = data_nav.fetch_scRNAseq(clusters, scRNAseq_meta, form='raw', neur_frac=0.1, nn_frac=0.1)
+scRNAseq_data = data_nav.fetch_scRNAseq(clusters, scRNAseq_meta, form='raw', neur_frac=0.06, nn_frac=0.06)
 
 scRNAseq_meta, scRNAseq_raw = scRNAseq_data
 scRNAseq_meta.reset_index(drop=True, inplace=True)
@@ -92,9 +145,9 @@ scRNAseq_meta.to_csv(os.path.join(params.local_data_dir, "MO-scRNAseq-NN-meta.cs
                                   index=False)
 
 # save MERFISH frequencies
-MERFISH_freqs = cell_funcs.calc_frac_per_type(MERFISH_meta)
+# MERFISH_freqs = cell_funcs.calc_frac_per_type(MERFISH_meta)
 with open(os.path.join(params.local_data_dir, "MO-MERFISH-NN-freqs.pkl"), 'wb') as handle:
-    pickle.dump(MERFISH_freqs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    pickle.dump(freqs, handle, protocol=pickle.HIGHEST_PROTOCOL)
     
 # save normalized scRNaseq data
 exp_norm = gene_funcs.normalize_counts_to_median(scRNAseq_raw)

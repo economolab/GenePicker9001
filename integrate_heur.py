@@ -13,7 +13,7 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 
-ntop = 2000
+ntop = 100
 
 path = r'C:\Users\jpv88\Documents\GitHub\GenePicker9001'
 token = "gene_df_" + str(ntop) +"_"

@@ -24,23 +24,61 @@ from genetic_algo import run_ga, find_genes
 
 # %%
 
-meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-meta.csv"), low_memory=False)
-exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
-freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
+# meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-meta.csv"), low_memory=False)
+# exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
+# freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
+
+meta = pd.read_csv(os.path.join(params.local_data_dir, "MO-scRNAseq-meta.csv"), low_memory=False)
+exp = np.load(os.path.join(params.local_data_dir, "MO-scRNAseq-raw.npy"))
+freqs = pd.read_pickle(os.path.join(params.local_data_dir, "MO-MERFISH-freqs.pkl"))
 
 exp = gene_funcs.normalize_counts_to_median(exp)
 
-exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=5)
+exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=3)
 
 # bootstrap distribution from scRNAseq that matches MERFISH frequencies
 exp_boot, meta_boot = cell_funcs.bootstrap_scRNAseq(meta_super, exp_super, freqs, 
-                                                    n=5000)
+                                                    n=10000)
+
+# %% which genes are most correlated with a given gene
+
+target_gene = "Slc6a5"
+
+all_genes = ABC_utils.load_gene("scRNAseq")
+gene_idx = np.where(all_genes == target_gene)[0][0]
+
+gene_corrs = {}
+for i in tqdm(range(len(all_genes))):
+    check_gene = all_genes[i]
+    
+    x = exp_boot[:,[gene_idx, i]]
+    R = np.corrcoef(x, rowvar=False)
+    
+    gene_corrs[check_gene] = R[0,1]
+
+gene_corrs_df = {}
+gene_corrs_df['gene'] = list(gene_corrs.keys())
+gene_corrs_df['corrcoef'] = list(gene_corrs.values())
+gene_corrs_df = pd.DataFrame(data=gene_corrs_df)
+
+# %%
+
+ABC_plot.plot_gene("Slc6a5", meta_boot, exp_boot, level='cluster')
+
+# %%
+
+ABC_plot.plot_gene("Slc30a3", meta_boot, exp_boot, level='cluster')
+
+# %%
+
+np.save("slc6a5_corr_genes.npy", gene_corrs_df['gene'][gene_corrs_df["corrcoef"] > 0].values)
+    
 
 # %%
 
 import matplotlib.pyplot as plt 
 
-gene_df = pd.read_csv("final_gene_df_100 (4).csv")
+gene_df = pd.read_csv("final_gene_df_100_MO_first_pass.csv")
 
 genes = gene_df['gene'].values
 all_genes = ABC_utils.load_gene("scRNAseq")

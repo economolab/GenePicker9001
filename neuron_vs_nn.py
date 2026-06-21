@@ -7,7 +7,6 @@ Created on Sun Apr  6 16:52:53 2025
 
 import logging
 import os
-import pygad
 import random
 
 import numpy as np
@@ -19,17 +18,16 @@ import params
 
 from ABC_toolbox import ABC_plot, ABC_utils, cell_funcs, classify_cells, gene_funcs, cluster_recombination
 from gene_filter import filt_genes
-from genetic_algo import run_ga
 
 # %%
 
-meta = pd.read_csv(os.path.join(params.local_data_dir, "MO-scRNAseq-NN-meta.csv"), low_memory=False)
-exp = np.load(os.path.join(params.local_data_dir, "MO-scRNAseq-NN-raw.npy"))
-freqs = pd.read_pickle(os.path.join(params.local_data_dir, "MO-MERFISH-NN-freqs.pkl"))
+meta = pd.read_csv(os.path.join(params.local_data_dir, "MRN-scRNAseq-NN-meta.csv"), low_memory=False)
+exp = np.load(os.path.join(params.local_data_dir, "MRN-scRNAseq-NN-raw.npy"))
+freqs = pd.read_pickle(os.path.join(params.local_data_dir, "MRN-MERFISH-NN-freqs.pkl"))
 
 exp = gene_funcs.normalize_counts_to_median(exp)
 
-exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=5, boot_factor=0.5)
+exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=3, boot_factor=0.5)
 
 exp_boot, meta_boot = cell_funcs.bootstrap_scRNAseq(meta_super, exp_super, freqs, 
                                                     n=10000)
@@ -112,9 +110,11 @@ gene_df, top_genes = filt_genes(exp_super, meta_super, freqs, top_n=1000, level=
 
 # %%
 
-meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-NN-meta.csv"), low_memory=False)
-exp = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-NN-raw.npy"))
-freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-NN-freqs.pkl"))
+meta = pd.read_csv(os.path.join(params.local_data_dir, "MRN-scRNAseq-NN-meta.csv"), low_memory=False)
+exp = np.load(os.path.join(params.local_data_dir, "MRN-scRNAseq-NN-raw.npy"))
+freqs = pd.read_pickle(os.path.join(params.local_data_dir, "MRN-MERFISH-NN-freqs.pkl"))
+
+exp = gene_funcs.normalize_counts_to_median(exp)
 
 # meta = pd.read_csv(os.path.join(params.local_data_dir, "MO-scRNAseq-NN-meta.csv"), low_memory=False)
 # exp = np.load(os.path.join(params.local_data_dir, "MO-scRNAseq-NN-raw.npy"))
@@ -122,11 +122,10 @@ freqs = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-
 
 exp_super, meta_super = cell_funcs.boot_super(exp, meta, k=3)
 
-exp_super = gene_funcs.normalize_counts_to_median(exp_super)
 
 # bootstrap distribution from scRNAseq that matches MERFISH frequencies
 exp_boot, meta_boot = cell_funcs.bootstrap_scRNAseq(meta_super, exp_super, freqs, 
-                                                    n=10000)
+                                                    n=40000)
 
 non_neuronal = ['30 Astro-Epen', '31 OPC-Oligo', '32 OEC', '33 Vascular', '34 Immune']
 
@@ -136,7 +135,7 @@ neuron_index = list(meta_boot.index[~nn_mask])
 
 # %%
 
-ABC_plot.plot_gene("Pcdh7", meta_boot, exp_boot, level='subclass')
+ABC_plot.plot_gene("Six3", meta_boot, exp_boot, level='subclass')
 
 # %%
 

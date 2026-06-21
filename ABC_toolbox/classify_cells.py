@@ -26,12 +26,10 @@ from ABC_toolbox import ABC_utils, cell_funcs
 # train a cell type classifier
 def train_classifier(X_train, y_train, clf_method='knn'):
     
-
     match clf_method:
         case 'knn':
             clf = KNeighborsClassifier(metric='cosine')
 
-                
     clf.fit(X_train, y_train)
 
     return clf
@@ -185,7 +183,8 @@ def gini(array):
 
 # cross-validate a classifier
 def cross_val_classifier_splits(data, freqs,
-                                genes=None, clf_method='knn', verbose=True):
+                                genes=None, clf_method='knn', verbose=True,
+                                merges=None):
     
     """
     Parameters
@@ -222,7 +221,20 @@ def cross_val_classifier_splits(data, freqs,
         
         train_mask = (meta['batch'].values == 'train')
         test_mask = (meta['batch'].values == 'test')
-        gene_mask = np.array([gene in genes for gene in ABC_utils.load_gene("scRNAseq")])
+        
+        scRNAseq_genes = list(ABC_utils.load_gene("scRNAseq"))
+        genes = list(genes)
+        
+        if merges is not None:
+            merge_genes = [merge[0] + '-' + merge[1] for merge in merges]
+            genes.extend(merge_genes)
+            scRNAseq_genes.extend(merge_genes)
+        
+        scRNAseq_genes = np.array(scRNAseq_genes)
+        genes = np.array(genes)
+        
+        gene_mask = np.array([gene in genes for gene in scRNAseq_genes])
+        genes = scRNAseq_genes[gene_mask]
         
         exp_train = exp[train_mask,:]
         exp_test = exp[test_mask,:]

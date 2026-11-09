@@ -33,9 +33,13 @@ import params
 
 # %%
 
-meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-meta.csv"), low_memory=False)
-exp_raw = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
-ratios = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
+# meta = pd.read_csv(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-meta.csv"), low_memory=False)
+# exp_raw = np.load(os.path.join(params.local_data_dir, "antIRN-PARN-scRNAseq-raw.npy"))
+# ratios = pd.read_pickle(os.path.join(params.local_data_dir, "antIRN-PARN-MERFISH-freqs.pkl"))
+
+meta = pd.read_csv(os.path.join(params.local_data_dir, "IRN-PARN-scRNAseq-meta.csv"), low_memory=False)
+exp_raw = np.load(os.path.join(params.local_data_dir, "IRN-PARN-scRNAseq-raw.npy"))
+ratios = pd.read_pickle(os.path.join(params.local_data_dir, "IRN-PARN-MERFISH-freqs.pkl"))
 
 # supercells is a bad idea here, it makes the cell types too different, every cluster
 # forms its own island
@@ -89,7 +93,7 @@ scanvi_model.train(max_epochs=50,
 
 # %%
 
-tot_cells = 20000       # total number of cells desired
+tot_cells = 50000       # total number of cells desired
 n_cells = {}            # cells needed of each type to match that target
 avail_cells = {}        # cells available of each type in raw data
 needed_rolls = {}
@@ -224,7 +228,10 @@ adata_us.obs["supertype"] = supertype
 adata_us.obs["subclass"] = subclass
 adata_us.obs["class"] = _class
 
-    
+# %%
+
+adata_us.write_h5ad("IRN-PARN-upsampled")
+
 # %%
 
 sc.pp.normalize_total(adata_us)
